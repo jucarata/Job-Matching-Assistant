@@ -1,0 +1,64 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "IBM Plex Sans Variable", "IBM Plex Sans", sans-serif;
+}
+
+:root {
+  --papel: #F4F1EA;
+  --superficie: #FFFDF8;
+  --superficie-2: #EFEBE3;
+  --linea: #DDD8CE;
+  --tinta: #1A1814;
+  --tinta-suave: #6B6560;
+  --teal: #0F5C57;
+  --teal-hover: #0C4A46;
+  --teal-suave: #E5F2F1;
+  --ok: #1F6B3A;
+  --ok-suave: #E7F3EC;
+  --aviso: #8A5A12;
+  --aviso-suave: #F8F0E0;
+  --error: #9F2D2D;
+  --error-suave: #F8E8E8;
+  --coral: #C44532;
+  --coral-suave: #FDECEA;
+  --ambar: #E09A12;
+  --ambar-suave: #FFF6DE;
+  --violeta: #5B4AD4;
+  --violeta-suave: #F0EDFC;
+  --cielo: #1F6FD4;
+  --cielo-suave: #E7F2FD;
+  --radio-tarjeta: 10px;
+  --radio-control: 8px;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background:
+    radial-gradient(920px 440px at -8% -16%, #b7e4dc 0%, transparent 62%),
+    radial-gradient(780px 400px at 108% -8%, #f7c7b4 0%, transparent 58%),
+    radial-gradient(700px 380px at 92% 108%, #d9d0fa 0%, transparent 52%),
+    radial-gradient(540px 300px at 8% 104%, #f8e3a8 0%, transparent 48%),
+    var(--papel);
+  color: var(--tinta);
+  font-family: "IBM Plex Sans Variable", "IBM Plex Sans", sans-serif;
+  font-size: 16px;
+  line-height: 1.5;
+}
+
+.texto-meta {
+  color: var(--tinta-suave);
+  font-size: 14px;
+}
+
+:where(button, input, textarea, a, [role="button"]):focus-visible {
+  outline: 2px solid var(--teal);
+  outline-offset: 2px;
+}
+
+button,
+input,
+textarea {
+  transition-duration: 180ms;
+}
