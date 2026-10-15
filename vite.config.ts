@@ -5,8 +5,10 @@ import react from "@vitejs/plugin-react"
 import { defineConfig } from "vitest/config"
 
 const root = import.meta.dirname
+const pagesBase = "/Job-Matching-Assistant/"
 
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
+  base: mode === "production" ? pagesBase : "/",
   plugins: [react(), tailwindcss()],
   resolve: {
     alias: {
@@ -18,4 +20,4 @@ export default defineConfig({
     setupFiles: "./src/test/setup.ts",
     css: true,
   },
-})
+}))
