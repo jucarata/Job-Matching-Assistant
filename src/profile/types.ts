@@ -3,11 +3,18 @@ export type ProfileLanguage = {
   level: string
 }
 
+export type ProfileRole = {
+  role: string
+  experience_time: number | null
+  reliability: number
+  evidence: string
+}
+
 export type Profile = {
   tech_skills: string[]
   soft_skills: string[]
   languages: ProfileLanguage[]
-  experience_time: number | null
+  roles: ProfileRole[]
   education: string[]
   flat_text: string
 }

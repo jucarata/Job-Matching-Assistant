@@ -527,7 +527,9 @@ function ProfileStatus({ profile }: { profile: Profile }) {
           icon={Briefcase}
           tone="teal"
           label="Experiencia"
-          value={profile.experience_time === null ? "" : `${profile.experience_time} años`}
+          value={profile.roles.flatMap((item) =>
+            item.experience_time === null ? [] : [`${item.role}: ${item.experience_time} años`],
+          )}
         />
         <ProfileField
           icon={GraduationCap}
@@ -547,18 +549,23 @@ function ProfileField({
   icon: Icon,
 }: {
   label: string
-  value: string
+  value: string | string[]
   tone: keyof typeof fieldTones
   icon: LucideIcon
 }) {
-  if (!value) return null
+  const lines = (Array.isArray(value) ? value : [value]).filter((line) => line.length > 0)
+  if (lines.length === 0) return null
   return (
     <div className={`rounded-[var(--radio-control)] border px-3 py-2 ${fieldTones[tone]}`}>
       <dt className="flex items-center gap-2 text-sm font-medium">
         <Icon aria-hidden="true" className="size-4" />
         {label}
       </dt>
-      <dd className="mt-1 text-[var(--tinta)]">{value}</dd>
+      {lines.map((line, index) => (
+        <dd key={`${line}-${index}`} className="mt-1 text-[var(--tinta)]">
+          {line}
+        </dd>
+      ))}
     </div>
   )
 }

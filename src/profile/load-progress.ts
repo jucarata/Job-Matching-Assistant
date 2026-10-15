@@ -3,6 +3,7 @@ export const LOAD_STEP_LABELS = [
   "Extraer el texto",
   "Guardar el texto",
   "Leer los datos con Gemini",
+  "Proponer los roles",
   "Redondear la experiencia",
   "Armar el perfil",
 ] as const

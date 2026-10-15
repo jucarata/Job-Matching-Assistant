@@ -7,11 +7,15 @@ Compara el profile completo de un CV con el mensaje de una vacante y devuelve la
 ## ADDED Requirements
 
 ### Requirement: Pedir el veredicto con el profile y el mensaje
-El sistema SHALL pedir el veredicto enviando `tech_skills`, `soft_skills`, `languages`, `experience_time`, `education`, `flat_text` y el texto del mensaje. SHALL NOT enviar el corte de postulación.
+El sistema SHALL pedir el veredicto enviando `tech_skills`, `soft_skills`, `languages`, `roles`, `education`, `flat_text` y el texto del mensaje. De `roles` SHALL enviar solo los conservados, y de cada uno solo `role` y `experience_time`. SHALL NOT enviar `reliability`, `evidence`, los roles descartados, un `experience_time` suelto ni el corte de postulación.
 
 #### Scenario: Envío con perfil y mensaje
 - **WHEN** hay un `profile`, una clave de Gemini y el usuario envía un texto
-- **THEN** la llamada incluye esos campos, `flat_text` y ese texto, y no incluye el corte
+- **THEN** la llamada incluye los roles conservados con `role` y `experience_time`, `flat_text` y ese texto, y no incluye el corte
+
+#### Scenario: Un rol descartado no viaja
+- **WHEN** el perfil conservó Full Stack y descartó Arquitecto de software, y el usuario envía un texto
+- **THEN** la llamada incluye Full Stack y no incluye Arquitecto de software, `reliability`, `evidence` ni un `experience_time` suelto
 
 ### Requirement: Pedir la comparación en inglés
 El system prompt de la llamada SHALL estar en inglés. SHALL pedir `matches`, `mismatches` y `score`, y SHALL pedir esas listas en el idioma del `profile`. SHALL NOT pedir una recomendación de postular ni un consejo. SHALL indicar que las notas del mensaje no son requisitos del puesto.

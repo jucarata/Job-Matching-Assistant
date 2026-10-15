@@ -11,7 +11,7 @@ const profileA: Profile = {
   tech_skills: ["React"],
   soft_skills: ["Comunicación"],
   languages: [{ language: "Español", level: "nativo" }],
-  experience_time: 3,
+  roles: [{ role: "Full Stack", experience_time: 3, reliability: 0.95, evidence: "CV de React" }],
   education: ["Ingeniería"],
   flat_text: "CV de React",
 }
@@ -20,7 +20,7 @@ const profileB: Profile = {
   tech_skills: ["Golang"],
   soft_skills: ["Mentoría"],
   languages: [{ language: "Inglés", level: "avanzado" }],
-  experience_time: 1.5,
+  roles: [{ role: "Backend", experience_time: 1.5, reliability: 0.9, evidence: "CV de Golang" }],
   education: ["Maestría"],
   flat_text: "CV de Golang",
 }
@@ -158,7 +158,7 @@ describe("pantalla sin perfil", () => {
     expect(screen.getByRole("button", { name: "Cargando CV…" })).toBeDisabled()
     const bar = screen.getByRole("progressbar")
     expect(bar).toHaveAttribute("aria-valuemin", "0")
-    expect(bar).toHaveAttribute("aria-valuemax", "6")
+    expect(bar).toHaveAttribute("aria-valuemax", "7")
     expect(bar).toHaveAttribute("aria-valuenow", "0")
     expect(bar).toHaveAttribute("aria-valuetext", "Validar el PDF")
     expect(screen.getByRole("list", { name: "Pasos de la carga" })).toBeInTheDocument()
@@ -191,7 +191,7 @@ describe("pantalla sin perfil", () => {
     await act(async () => {
       report?.({
         completed: 3,
-        total: 6,
+        total: 7,
         label: "Leer los datos con Gemini",
         status: "active",
       })
@@ -201,7 +201,7 @@ describe("pantalla sin perfil", () => {
 
     await finishLoad(pending, { ok: true, profile: profileA })
 
-    expect(screen.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "6")
+    expect(screen.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "7")
     expect(screen.getByRole("progressbar")).toHaveAttribute("aria-valuetext", "CV listo")
     expect(screen.getByText("React")).toBeInTheDocument()
     expect(screen.getByRole("button", { name: "Reemplazar CV" })).toBeEnabled()
@@ -357,6 +357,66 @@ describe("pantalla con perfil", () => {
     expect(screen.getByRole("button", { name: "Enviar" })).toBeEnabled()
   })
 
+  it("muestra cada rol conservado con sus años, sin fiabilidad ni frase", async () => {
+    const { calls, user } = renderShell()
+    await chooseFile(user)
+    await finishLoad(calls[0], {
+      ok: true,
+      profile: {
+        ...profileA,
+        roles: [
+          { role: "Full Stack", experience_time: 2, reliability: 0.95, evidence: "frase de evidencia" },
+          { role: "Backend", experience_time: 2, reliability: 0.84, evidence: "otra frase" },
+          { role: "Frontend", experience_time: 2, reliability: 0.8, evidence: "tercera frase" },
+        ],
+      },
+    })
+
+    const profile = await screen.findByRole("region", { name: "Estado del perfil" })
+    const experience = within(profile).getByText("Experiencia").parentElement
+    expect(within(profile).getAllByText("Experiencia")).toHaveLength(1)
+    expect(experience).toHaveTextContent("Full Stack: 2 años")
+    expect(experience).toHaveTextContent("Backend: 2 años")
+    expect(experience).toHaveTextContent("Frontend: 2 años")
+    expect(within(profile).getByText("Full Stack: 2 años")).toBeInTheDocument()
+    expect(within(profile).getByText("Backend: 2 años")).toBeInTheDocument()
+    expect(within(profile).getByText("Frontend: 2 años")).toBeInTheDocument()
+    expect(profile.textContent).not.toContain("0.95")
+    expect(profile.textContent).not.toContain("frase de evidencia")
+    expect(profile.textContent).not.toContain("otra frase")
+    expect(profile.textContent).not.toContain("tercera frase")
+  })
+
+  it("no muestra el arquitecto que se descartó", async () => {
+    const { calls, user } = renderShell()
+    await chooseFile(user)
+    await finishLoad(calls[0], {
+      ok: true,
+      profile: {
+        ...profileA,
+        roles: [{ role: "Full Stack", experience_time: 2, reliability: 0.95, evidence: "Full Stack" }],
+      },
+    })
+
+    const profile = await screen.findByRole("region", { name: "Estado del perfil" })
+    expect(within(profile).getByText("Full Stack: 2 años")).toBeInTheDocument()
+    expect(within(profile).queryByText(/Arquitecto/)).not.toBeInTheDocument()
+  })
+
+  it("sin roles no hay línea de experiencia y la conversación acepta texto", async () => {
+    const { calls, user } = renderShell()
+    await chooseFile(user)
+    await finishLoad(calls[0], { ok: true, profile: { ...profileA, roles: [] } })
+
+    const profile = await screen.findByRole("region", { name: "Estado del perfil" })
+    expect(within(profile).queryByText("Experiencia")).not.toBeInTheDocument()
+    expect(profile.textContent).not.toContain("años")
+    const message = screen.getByLabelText("Mensaje")
+    expect(message).toBeEnabled()
+    await user.type(message, "quiero revisar una vacante")
+    expect(message).toHaveValue("quiero revisar una vacante")
+  })
+
   it("al volver a abrir la página muestra el perfil que guardó la carga", async () => {
     const loadCv = createCvLoader(
       () => ({
@@ -365,11 +425,20 @@ describe("pantalla con perfil", () => {
           soft_skills: ["Comunicación"],
           languages: [{ language: "Español", level: "nativo" }],
           education: ["Ingeniería"],
-          experience_years: 3,
-          experience_months: null,
         }),
       }),
       async () => "CV de React",
+      () => ({
+        invoke: async () => [
+          {
+            role: "Full Stack",
+            experience_years: 3,
+            experience_months: null,
+            reliability: 0.95,
+            evidence: "CV de React",
+          },
+        ],
+      }),
     )
     const user = userEvent.setup()
     const first = render(<AssistantShell loadCv={loadCv} />)
@@ -385,7 +454,7 @@ describe("pantalla con perfil", () => {
     expect(await screen.findByText("React")).toBeInTheDocument()
     expect(screen.getByText("Comunicación")).toBeInTheDocument()
     expect(screen.getByText("Español (nativo)")).toBeInTheDocument()
-    expect(screen.getByText("3 años")).toBeInTheDocument()
+    expect(screen.getByText("Full Stack: 3 años")).toBeInTheDocument()
     expect(screen.getByText("Ingeniería")).toBeInTheDocument()
     expect(screen.getByLabelText("Mensaje")).toBeEnabled()
     expect(screen.getByRole("button", { name: "Reemplazar CV" })).toBeInTheDocument()

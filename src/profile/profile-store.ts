@@ -1,5 +1,5 @@
 import { LoadStepError, PROFILE_SAVE_FAILED } from "@/profile/load-errors"
-import type { Profile, ProfileLanguage } from "@/profile/types"
+import type { Profile, ProfileLanguage, ProfileRole } from "@/profile/types"
 
 export const PROFILE_DB_NAME = "johai"
 export const PROFILE_STORE_NAME = "profile"
@@ -34,7 +34,12 @@ function profileRecord(profile: Profile): Profile {
       language: item.language,
       level: item.level,
     })),
-    experience_time: profile.experience_time,
+    roles: profile.roles.map((item) => ({
+      role: item.role,
+      experience_time: item.experience_time,
+      reliability: item.reliability,
+      evidence: item.evidence,
+    })),
     education: [...profile.education],
     flat_text: profile.flat_text,
   }
@@ -50,12 +55,23 @@ function isLanguage(value: unknown): value is ProfileLanguage {
   return typeof item.language === "string" && typeof item.level === "string"
 }
 
+function isRole(value: unknown): value is ProfileRole {
+  if (!value || typeof value !== "object") return false
+  const item = value as ProfileRole
+  return (
+    typeof item.role === "string" &&
+    (item.experience_time === null || typeof item.experience_time === "number") &&
+    typeof item.reliability === "number" &&
+    typeof item.evidence === "string"
+  )
+}
+
 function asProfile(value: unknown): Profile | null {
   if (!value || typeof value !== "object") return null
   const record = value as Profile
   if (!isStringArray(record.tech_skills) || !isStringArray(record.soft_skills)) return null
   if (!isStringArray(record.education) || typeof record.flat_text !== "string") return null
-  if (record.experience_time !== null && typeof record.experience_time !== "number") return null
+  if (!Array.isArray(record.roles) || !record.roles.every(isRole)) return null
   if (!Array.isArray(record.languages) || !record.languages.every(isLanguage)) return null
   return profileRecord(record)
 }

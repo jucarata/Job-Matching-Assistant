@@ -6,12 +6,15 @@ import {
   type ExtractedFields,
   type FieldChain,
 } from "@/ai/load-chain"
+import { createRoleChain } from "@/ai/role-chain"
 import { roundExperienceTime } from "@/profile/experience"
+import { filterProposedRoles } from "@/profile/roles"
 import {
   LoadStepError,
   GEMINI_UNAVAILABLE,
   MODEL_STEP_TIMEOUT,
   PDF_STEP_TIMEOUT,
+  ROLE_STEP_TIMEOUT,
   PROFILE_SAVE_FAILED,
   UNUSABLE_PROFILE,
 } from "@/profile/load-errors"
@@ -23,7 +26,7 @@ import {
   PDF_STEP_TIMEOUT_MS,
 } from "@/profile/load-progress"
 import { assignFlatText, extractPdfText, validatePdfFile } from "@/profile/pdf-text"
-import type { LoadProgress, Profile } from "@/profile/types"
+import type { LoadProgress, Profile, ProfileRole } from "@/profile/types"
 
 export type TextDraft = {
   flat_text: string
@@ -33,14 +36,19 @@ export type FieldDraft = TextDraft & {
   fields: ExtractedFields
 }
 
-export type RoundedDraft = FieldDraft & {
-  experience_time: number | null
+export type RoleDraft = FieldDraft & {
+  proposed: unknown[]
+}
+
+export type RoundedDraft = RoleDraft & {
+  roles: ProfileRole[]
 }
 
 export type LoadPipelineOptions = {
   apiKey: string
   extractText?: (file: File) => Promise<string>
   createChain?: (apiKey: string) => FieldChain
+  createRoleChain?: (apiKey: string) => FieldChain
   persistProfile?: (profile: Profile) => Promise<void>
   onProgress?: (progress: LoadProgress) => void
 }
@@ -134,13 +142,32 @@ export function createExtractFieldsStep(extractFields: (text: string) => Promise
   return (input: TextDraft) => extractStructuredFields(input, extractFields)
 }
 
-export function applyExperienceRounding(draft: FieldDraft): RoundedDraft {
+export async function readProposedRoles(
+  draft: FieldDraft,
+  propose: (text: string) => Promise<unknown>,
+): Promise<RoleDraft> {
+  let raw: unknown
+  try {
+    raw = await propose(draft.flat_text)
+  } catch (error) {
+    throw modelFailure(error)
+  }
+  if (!Array.isArray(raw)) throw new LoadStepError(UNUSABLE_PROFILE)
   return {
     ...draft,
-    experience_time: roundExperienceTime(
-      draft.fields.experience_years,
-      draft.fields.experience_months,
-    ),
+    proposed: raw,
+  }
+}
+
+export function applyExperienceRounding(draft: RoleDraft): RoundedDraft {
+  return {
+    ...draft,
+    roles: filterProposedRoles(draft.proposed, draft.flat_text).map((item) => ({
+      role: item.role,
+      experience_time: roundExperienceTime(item.experience_years, item.experience_months),
+      reliability: item.reliability,
+      evidence: item.evidence,
+    })),
   }
 }
 
@@ -150,7 +177,7 @@ export function composeProfile(draft: RoundedDraft): Profile {
     soft_skills: draft.fields.soft_skills,
     languages: draft.fields.languages,
     education: draft.fields.education,
-    experience_time: draft.experience_time,
+    roles: draft.roles,
     flat_text: draft.flat_text,
   }
 }
@@ -172,8 +199,10 @@ async function storeComposedProfile(
 export function createLoadPipeline(options: LoadPipelineOptions) {
   const readText = options.extractText ?? extractPdfText
   const createChain = options.createChain ?? createLoadChain
+  const createRoles = options.createRoleChain ?? createRoleChain
   const persist = options.persistProfile ?? saveProfile
   const extractFields = (text: string) => createChain(options.apiKey).invoke({ text })
+  const proposeRoles = (text: string) => createRoles(options.apiKey).invoke({ text })
   const { onProgress } = options
 
   return RunnableSequence.from([
@@ -199,9 +228,17 @@ export function createLoadPipeline(options: LoadPipelineOptions) {
         onProgress,
       ),
     ),
-    RunnableLambda.from(trackStep(4, applyExperienceRounding, onProgress)),
     RunnableLambda.from(
-      trackStep(5, (draft: RoundedDraft) => storeComposedProfile(draft, persist), onProgress),
+      trackStep(
+        4,
+        (draft: FieldDraft) =>
+          withTimeout(readProposedRoles(draft, proposeRoles), MODEL_STEP_TIMEOUT_MS, ROLE_STEP_TIMEOUT),
+        onProgress,
+      ),
+    ),
+    RunnableLambda.from(trackStep(5, applyExperienceRounding, onProgress)),
+    RunnableLambda.from(
+      trackStep(6, (draft: RoundedDraft) => storeComposedProfile(draft, persist), onProgress),
     ),
   ])
 }

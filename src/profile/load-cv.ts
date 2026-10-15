@@ -1,6 +1,7 @@
 import { MISSING_GEMINI_KEY } from "@/ai/gemini"
 import type { FieldChain } from "@/ai/load-chain"
 import { createLoadChain } from "@/ai/load-chain"
+import { createRoleChain } from "@/ai/role-chain"
 import { LoadStepError, UNUSABLE_PROFILE } from "@/profile/load-errors"
 import { createLoadPipeline } from "@/profile/load-pipeline"
 import type { CvLoader } from "@/profile/types"
@@ -18,6 +19,7 @@ function failureMessage(error: unknown): string {
 export function createCvLoader(
   createChain: (apiKey: string) => FieldChain = createLoadChain,
   extractText?: (file: File) => Promise<string>,
+  createRoles: (apiKey: string) => FieldChain = createRoleChain,
 ): CvLoader {
   return async (file, apiKey, onProgress) => {
     const key = apiKey.trim()
@@ -27,6 +29,7 @@ export function createCvLoader(
       const pipeline = createLoadPipeline({
         apiKey: key,
         createChain,
+        createRoleChain: createRoles,
         extractText,
         onProgress,
       })
