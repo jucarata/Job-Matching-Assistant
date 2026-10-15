@@ -42,8 +42,10 @@ describe("cadena de roles", () => {
   it("pide el cargo y sus partes, el tiempo entero y el techo de 0.7", async () => {
     const chain = createRoleChain("clave-de-prueba")
     expect(chain).toBeInstanceOf(RunnableSequence)
+    if (!(chain instanceof RunnableSequence)) throw new Error("La cadena no es una secuencia")
     const prompt = chain.steps[0]
     expect(prompt).toBeInstanceOf(ChatPromptTemplate)
+    if (!(prompt instanceof ChatPromptTemplate)) throw new Error("Falta el prompt")
     const messages = await prompt.formatMessages({ text: "cv" })
     const system = String(messages[0].content)
 

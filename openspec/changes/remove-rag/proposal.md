@@ -9,7 +9,7 @@ El perfil del CV no va a recuperarse por similitud. Partir el texto en chunks, e
 - **BREAKING** El perfil deja de incluir chunks y embeddings. Tras una carga válida solo se conserva el estado estructurado.
 - **BREAKING** Se elimina generar chunks por aspecto del CV, pedir un embedding por chunk y guardar texto, aspecto y vector en la base local.
 - **BREAKING** Queda fuera del proyecto la consulta posterior de esos chunks: no hay índice vectorial ni recuperación por embeddings, ni en esta etapa ni en una posterior.
-- La carga sigue aceptando solo un PDF, extrae el texto sin un modelo y pide a Gemini únicamente el estado estructurado (`tech_skills`, `soft_skills`, `languages`, `experience_time`, `education`).
+- La carga sigue aceptando solo un PDF, extrae el texto sin un modelo, lo guarda como `flat_text` y pide a Gemini el resto del estado (`tech_skills`, `soft_skills`, `languages`, `experience_time`, `education`). La llamada del veredicto envía `flat_text`.
 - Cada carga sigue siendo una ejecución nueva. Sigue habiendo un solo perfil, la API key de Gemini en el navegador y el redondeo de los años en código.
 - La pantalla de `assistant-shell` no cambia: sigue mostrando el estado del perfil, no chunks.
 

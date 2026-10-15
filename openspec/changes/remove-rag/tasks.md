@@ -2,6 +2,8 @@
 
 ## 1. Spec viva de cv-profile
 
+El texto del CV se guarda como `flat_text` y la llamada del veredicto lo envía.
+
 - [ ] 1.1 Reescribir `openspec/changes/job-fit-assistant/specs/cv-profile/spec.md` para que el propósito y los requisitos ADDED guarden solo el estado estructurado. Quitar «Generar chunks por aspecto del CV», «Guardar chunks con embeddings» y «Terminar solo si las dos ramas quedan guardadas». Ajustar «No guardar el PDF», «Guardar el estado estructurado» (incluido el escenario sin API key), «Conservar un solo perfil», «Reemplazar el perfil» y «Rechazar un PDF sin texto». Añadir «Informar éxito solo con el estado guardado» y «No indexar ni consultar el CV por embeddings», como en `openspec/changes/remove-rag/specs/cv-profile/spec.md`. Verificar con `openspec validate job-fit-assistant --type change` y que ese archivo ya no contiene `embedding`.
 
 ## 2. Plan de job-fit-assistant

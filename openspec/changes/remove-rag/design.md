@@ -82,7 +82,7 @@ Alternativa considerada: una capacidad nueva solo para prohibir la recuperación
 - [Las dos changes describen `cv-profile` hasta que `job-fit-assistant` se reescriba] → Esta change se aplica antes de implementar esa change. Las tareas 2.2 y 2.4 dejan de pedir chunks y embeddings.
 - [Archivar `remove-rag` ahora falla] → No se archiva este delta mientras no exista `openspec/specs/cv-profile` con los requisitos que retira. Si la change de origen se corrige antes de archivarse, el cierre es esa corrección.
 - [Una change posterior vuelve a introducir recuperación por embeddings] → Tiene que modificar el requisito que lo prohíbe. No queda un cliente ni un almacén a medio conectar.
-- [El veredicto de una vacante pierde el texto literal del CV] → El estado estructurado es lo que se guarda. Volver a indexar el PDF queda fuera de este diseño.
+- [El veredicto de una vacante necesita el texto literal del CV] → El texto se guarda como `flat_text` y la llamada del veredicto lo envía. Volver a indexar el PDF queda fuera de este diseño.
 
 ## Migration Plan
 

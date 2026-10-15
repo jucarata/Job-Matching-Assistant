@@ -111,8 +111,10 @@ describe("cadena de carga", () => {
   it("la primera cadena ya no pide la experiencia", async () => {
     const chain = createLoadChain("clave")
     expect(chain).toBeInstanceOf(RunnableSequence)
+    if (!(chain instanceof RunnableSequence)) throw new Error("La cadena no es una secuencia")
     const prompt = chain.steps[0]
     expect(prompt).toBeInstanceOf(ChatPromptTemplate)
+    if (!(prompt instanceof ChatPromptTemplate)) throw new Error("Falta el prompt")
     const messages = await prompt.formatMessages({ text: "cv" })
     const system = String(messages[0].content)
     expect(system).not.toContain("experience_years")

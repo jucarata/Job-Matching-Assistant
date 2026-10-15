@@ -3,8 +3,11 @@ import userEvent from "@testing-library/user-event"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import css from "../index.css?raw"
 import { toast } from "sonner"
+import { requestVerdict as runVerdict } from "@/ai/verdict-chain"
 import { createCvLoader } from "@/profile/load-cv"
+import { saveProfile } from "@/profile/profile-store"
 import { AssistantShell } from "@/shell/AssistantShell"
+import type { Verdict } from "@/ai/verdict-chain"
 import type { CvLoader, LoadProgress, LoadResult, Profile } from "@/profile/types"
 
 const profileA: Profile = {
@@ -27,14 +30,17 @@ const profileB: Profile = {
 
 function deferred<T>() {
   let resolve!: (value: T) => void
-  const promise = new Promise<T>((res) => {
+  let reject!: (reason?: unknown) => void
+  const promise = new Promise<T>((res, rej) => {
     resolve = res
+    reject = rej
   })
-  return { promise, resolve }
+  return { promise, resolve, reject }
 }
 
 function renderShell() {
   localStorage.removeItem("geminiApiKey")
+  localStorage.removeItem("fitThreshold")
   const calls: Array<ReturnType<typeof deferred<LoadResult>>> = []
   const loadCv: CvLoader = () => {
     const pending = deferred<LoadResult>()
@@ -79,6 +85,7 @@ async function finishLoad(
 
 afterEach(() => {
   localStorage.removeItem("geminiApiKey")
+  localStorage.removeItem("fitThreshold")
   toast.dismiss()
   vi.restoreAllMocks()
 })
@@ -258,6 +265,13 @@ describe("pantalla con perfil", () => {
     expect(primary).toHaveLength(1)
     expect(primary[0]).toHaveAccessibleName("Enviar")
 
+    const message = screen.getByLabelText("Mensaje")
+    const send = screen.getByRole("button", { name: "Enviar" })
+    const composer = message.parentElement?.parentElement
+    expect(composer).toContainElement(send)
+    expect(composer).toHaveClass("flex", "items-center")
+    expect(composer).not.toHaveClass("flex-col")
+
     const key = screen.getByLabelText("Clave de Gemini")
     const replace = screen.getByRole("button", { name: "Reemplazar CV" })
     expect(key).toBeVisible()
@@ -269,23 +283,11 @@ describe("pantalla con perfil", () => {
     expect(click).toHaveBeenCalled()
   })
 
-  it("Envío sin respuesta: conserva el texto y no llama a la red", async () => {
-    const fetchSpy = vi.spyOn(globalThis, "fetch")
-    const xhrSpy = vi.spyOn(XMLHttpRequest.prototype, "open")
+  it("con perfil la conversación está abierta antes de enviar", async () => {
     const { calls, user } = renderShell()
     await chooseFile(user)
     await finishLoad(calls[0], { ok: true, profile: profileA })
-    await screen.findByText("React")
-
-    await user.type(screen.getByLabelText("Mensaje"), "Hola, quiero revisar mi perfil")
-    await user.click(screen.getByRole("button", { name: "Enviar" }))
-
-    expect(screen.getByLabelText("Mensaje")).toHaveValue("Hola, quiero revisar mi perfil")
-    expect(screen.getByRole("region", { name: "Conversación" }).textContent).not.toContain(
-      "Hola, quiero revisar mi perfil",
-    )
-    expect(fetchSpy).not.toHaveBeenCalled()
-    expect(xhrSpy).not.toHaveBeenCalled()
+    expect(await screen.findByText("La conversación está abierta")).toBeInTheDocument()
   })
 
   it("Reemplazo en curso: Enviar inactivo y el perfil anterior sigue visible", async () => {
@@ -459,5 +461,264 @@ describe("pantalla con perfil", () => {
     expect(screen.getByLabelText("Mensaje")).toBeEnabled()
     expect(screen.getByRole("button", { name: "Reemplazar CV" })).toBeInTheDocument()
     expect(screen.queryByRole("button", { name: "Cargar CV" })).not.toBeInTheDocument()
+  })
+})
+
+const lowVerdict: Verdict = {
+  matches: ["React en el puesto"],
+  mismatches: ["Falta Go"],
+  score: 6.5,
+}
+
+function renderChat() {
+  localStorage.removeItem("geminiApiKey")
+  localStorage.removeItem("fitThreshold")
+  const loads: Array<ReturnType<typeof deferred<LoadResult>>> = []
+  const verdicts: Array<ReturnType<typeof deferred<Verdict>>> = []
+  const verdictCalls: string[] = []
+  const loadCv: CvLoader = () => {
+    const pending = deferred<LoadResult>()
+    loads.push(pending)
+    return pending.promise
+  }
+  const requestVerdict = (_profile: Profile, message: string) => {
+    verdictCalls.push(message)
+    const pending = deferred<Verdict>()
+    verdicts.push(pending)
+    return pending.promise
+  }
+  const user = userEvent.setup()
+  const view = render(<AssistantShell loadCv={loadCv} requestVerdict={requestVerdict} />)
+  return { loads, verdicts, verdictCalls, user, unmount: view.unmount }
+}
+
+async function loadChatProfile(chat: ReturnType<typeof renderChat>, profile: Profile = profileA) {
+  await chooseFile(chat.user)
+  await finishLoad(chat.loads[0], { ok: true, profile })
+  await screen.findByText(profile.tech_skills[0])
+}
+
+async function sendVacancy(chat: ReturnType<typeof renderChat>, text: string) {
+  await chat.user.type(screen.getByLabelText("Mensaje"), text)
+  await chat.user.click(screen.getByRole("button", { name: "Enviar" }))
+}
+
+describe("chat de una vacante", () => {
+  it("muestra el intercambio y no lo guarda en el navegador", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch")
+    const xhrSpy = vi.spyOn(XMLHttpRequest.prototype, "open")
+    const chat = renderChat()
+    await loadChatProfile(chat)
+    expect(screen.getByText("La conversación está abierta")).toBeInTheDocument()
+
+    await sendVacancy(chat, "Vacante de plataforma")
+
+    expect(screen.getByLabelText("Mensaje")).toHaveValue("")
+    expect(screen.getByText("Vacante de plataforma")).toBeInTheDocument()
+    expect(screen.queryByText("La conversación está abierta")).not.toBeInTheDocument()
+    expect(screen.queryByText("Puntaje")).not.toBeInTheDocument()
+    expect(chat.verdictCalls).toEqual(["Vacante de plataforma"])
+
+    await act(async () => {
+      chat.verdicts[0].resolve(lowVerdict)
+    })
+
+    expect(screen.getByText("Puntaje")).toBeInTheDocument()
+    expect(screen.getByText("6.5")).toBeInTheDocument()
+    expect(screen.getByText("No postular")).toBeInTheDocument()
+    expect(screen.getByText("Coincidencias")).toBeInTheDocument()
+    expect(screen.getByText("React en el puesto")).toBeInTheDocument()
+    expect(screen.getByText("No coinciden")).toBeInTheDocument()
+    expect(screen.getByText("Falta Go")).toBeInTheDocument()
+    const conversation = screen.getByRole("region", { name: "Conversación" })
+    const scroller = conversation.querySelector("[data-chat-scroll]")
+    expect(scroller).toBeInstanceOf(HTMLElement)
+    expect(scroller?.className).toContain("overflow-y-auto")
+    expect(scroller?.className).toContain("min-h-0")
+    expect(scroller).toContainElement(screen.getByText("Vacante de plataforma"))
+    expect(scroller).toContainElement(screen.getByText("Puntaje"))
+    expect(scroller).not.toContainElement(screen.getByLabelText("Mensaje"))
+    expect(fetchSpy).not.toHaveBeenCalled()
+    expect(xhrSpy).not.toHaveBeenCalled()
+    expect(Object.keys(localStorage).sort()).toEqual(["fitThreshold", "geminiApiKey"])
+    const stored = Object.values(localStorage).join("\n")
+    expect(stored).not.toContain("Vacante de plataforma")
+    expect(stored).not.toContain("React en el puesto")
+  })
+
+  it("sin clave o sin texto conserva el intercambio y no llama", async () => {
+    const chat = renderChat()
+    await loadChatProfile(chat)
+    await sendVacancy(chat, "Vacante de plataforma")
+    await act(async () => {
+      chat.verdicts[0].resolve(lowVerdict)
+    })
+    await screen.findByText("No postular")
+
+    await chat.user.clear(screen.getByLabelText("Clave de Gemini"))
+    await chat.user.type(screen.getByLabelText("Mensaje"), "otra vacante")
+    await chat.user.click(screen.getByRole("button", { name: "Enviar" }))
+
+    expect(chat.verdictCalls).toEqual(["Vacante de plataforma"])
+    expect(screen.getByLabelText("Mensaje")).toHaveValue("otra vacante")
+    expect(screen.getByText("Vacante de plataforma")).toBeInTheDocument()
+    expect(screen.getByText("No postular")).toBeInTheDocument()
+
+    await chat.user.type(screen.getByLabelText("Clave de Gemini"), "clave-de-prueba")
+    await chat.user.clear(screen.getByLabelText("Mensaje"))
+    await chat.user.click(screen.getByRole("button", { name: "Enviar" }))
+
+    expect(chat.verdictCalls).toEqual(["Vacante de plataforma"])
+    expect(screen.getByLabelText("Mensaje")).toHaveValue("")
+    expect(screen.getByText("No postular")).toBeInTheDocument()
+  })
+
+  it("si la llamada falla devuelve el aviso, el texto y el error junto a Enviar", async () => {
+    const chat = renderChat()
+    await loadChatProfile(chat)
+    await sendVacancy(chat, "Vacante de plataforma")
+    await act(async () => {
+      chat.verdicts[0].reject(new Error("No se pudo revisar la vacante."))
+    })
+
+    expect(screen.getByLabelText("Mensaje")).toHaveValue("Vacante de plataforma")
+    expect(screen.getByText("La conversación está abierta")).toBeInTheDocument()
+    expect(screen.queryByText("Puntaje")).not.toBeInTheDocument()
+    const conversation = screen.getByRole("region", { name: "Conversación" })
+    const alert = screen.getByRole("alert")
+    expect(alert).toHaveTextContent("No se pudo revisar la vacante.")
+    expect(conversation.contains(alert)).toBe(true)
+    expect(conversation.contains(screen.getByRole("button", { name: "Enviar" }))).toBe(true)
+  })
+
+  it("un envío nuevo quita el anterior y, si falla, deja la conversación sin intercambio", async () => {
+    const chat = renderChat()
+    await loadChatProfile(chat)
+    await sendVacancy(chat, "Vacante de plataforma")
+    await act(async () => {
+      chat.verdicts[0].resolve(lowVerdict)
+    })
+    await screen.findByText("React en el puesto")
+
+    await sendVacancy(chat, "Segunda vacante")
+
+    expect(screen.queryByText("React en el puesto")).not.toBeInTheDocument()
+    expect(screen.queryByText("Vacante de plataforma")).not.toBeInTheDocument()
+    expect(screen.getByText("Segunda vacante")).toBeInTheDocument()
+    expect(screen.getByLabelText("Mensaje")).toHaveValue("")
+
+    await act(async () => {
+      chat.verdicts[1].reject(new Error("No se pudo revisar la vacante."))
+    })
+
+    expect(screen.queryByText("Puntaje")).not.toBeInTheDocument()
+    expect(screen.queryByText("React en el puesto")).not.toBeInTheDocument()
+    expect(screen.getByText("La conversación está abierta")).toBeInTheDocument()
+    expect(screen.getByLabelText("Mensaje")).toHaveValue("Segunda vacante")
+    const conversation = screen.getByRole("region", { name: "Conversación" })
+    expect(conversation.contains(screen.getByRole("alert"))).toBe(true)
+  })
+
+  it("un puntaje fuera de la grilla no deja intercambio", async () => {
+    localStorage.removeItem("geminiApiKey")
+    localStorage.removeItem("fitThreshold")
+    const loads: Array<ReturnType<typeof deferred<LoadResult>>> = []
+    const loadCv: CvLoader = () => {
+      const pending = deferred<LoadResult>()
+      loads.push(pending)
+      return pending.promise
+    }
+    const requestVerdict = (profile: Profile, message: string) =>
+      runVerdict({ invoke: async () => ({ matches: ["a"], mismatches: ["b"], score: 7.3 }) }, profile, message)
+    const user = userEvent.setup()
+    render(<AssistantShell loadCv={loadCv} requestVerdict={requestVerdict} />)
+    await chooseFile(user)
+    await finishLoad(loads[0], { ok: true, profile: profileA })
+    await screen.findByText("React")
+    await user.type(screen.getByLabelText("Mensaje"), "Vacante rara")
+    await user.click(screen.getByRole("button", { name: "Enviar" }))
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("No se pudo revisar la vacante.")
+    expect(screen.getByLabelText("Mensaje")).toHaveValue("Vacante rara")
+    expect(screen.getByText("La conversación está abierta")).toBeInTheDocument()
+    expect(screen.queryByText("Puntaje")).not.toBeInTheDocument()
+  })
+
+  it("un reemplazo válido borra el intercambio y uno rechazado lo conserva", async () => {
+    const chat = renderChat()
+    await loadChatProfile(chat)
+    await sendVacancy(chat, "Vacante de plataforma")
+    await act(async () => {
+      chat.verdicts[0].resolve(lowVerdict)
+    })
+    await screen.findByText("Puntaje")
+    await chat.user.type(screen.getByLabelText("Mensaje"), "borrador que se queda")
+
+    await chooseFile(chat.user)
+    await finishLoad(chat.loads[1], { ok: false, message: "El PDF no tiene texto." })
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("El PDF no tiene texto.")
+    expect(screen.getByText("Vacante de plataforma")).toBeInTheDocument()
+    expect(screen.getByText("No postular")).toBeInTheDocument()
+    expect(screen.getByLabelText("Mensaje")).toHaveValue("borrador que se queda")
+    const profile = screen.getByRole("region", { name: "Perfil" })
+    expect(profile.contains(screen.getByRole("alert"))).toBe(true)
+
+    await chooseFile(chat.user)
+    await finishLoad(chat.loads[2], { ok: true, profile: profileB })
+
+    expect(await screen.findByText("Golang")).toBeInTheDocument()
+    expect(screen.queryByText("Vacante de plataforma")).not.toBeInTheDocument()
+    expect(screen.queryByText("Puntaje")).not.toBeInTheDocument()
+    expect(screen.getByText("La conversación está abierta")).toBeInTheDocument()
+    expect(screen.getByLabelText("Mensaje")).toHaveValue("")
+  })
+
+  it("recargar no recupera el intercambio y el perfil sigue", async () => {
+    const chat = renderChat()
+    await loadChatProfile(chat)
+    await sendVacancy(chat, "Vacante de plataforma")
+    await act(async () => {
+      chat.verdicts[0].resolve(lowVerdict)
+    })
+    await screen.findByText("React en el puesto")
+    await saveProfile(profileA)
+
+    chat.unmount()
+    render(<AssistantShell />)
+
+    expect(await screen.findByText("React")).toBeInTheDocument()
+    expect(screen.queryByText("Vacante de plataforma")).not.toBeInTheDocument()
+    expect(screen.queryByText("React en el puesto")).not.toBeInTheDocument()
+    expect(screen.getByText("La conversación está abierta")).toBeInTheDocument()
+    expect(Object.values(localStorage).join("\n")).not.toContain("Vacante de plataforma")
+  })
+
+  it("cambiar el corte de 7 a 6 vuelve a etiquetar 6.5 sin otra llamada", async () => {
+    const chat = renderChat()
+    await loadChatProfile(chat)
+    await sendVacancy(chat, "Vacante de plataforma")
+    await act(async () => {
+      chat.verdicts[0].resolve(lowVerdict)
+    })
+    expect(await screen.findByText("No postular")).toBeInTheDocument()
+    expect(screen.getByText("6.5")).toBeInTheDocument()
+
+    await chat.user.click(screen.getByRole("button", { name: "Ajustes" }))
+    const dialog = await screen.findByRole("dialog", { name: "Ajustes" })
+    const conversation = screen.getByRole("region", { name: "Conversación", hidden: true })
+    expect(conversation.contains(dialog)).toBe(false)
+    const control = within(dialog).getByLabelText("Postular desde")
+    expect(control).toHaveValue("7")
+    expect(within(dialog).queryByLabelText("Clave de Gemini")).not.toBeInTheDocument()
+
+    await chat.user.selectOptions(control, "6")
+    await chat.user.click(screen.getByRole("button", { name: "Cerrar" }))
+
+    expect(screen.getByText("Postular")).toBeInTheDocument()
+    expect(screen.queryByText("No postular")).not.toBeInTheDocument()
+    expect(screen.getByText("6.5")).toBeInTheDocument()
+    expect(chat.verdictCalls).toEqual(["Vacante de plataforma"])
+    expect(localStorage.getItem("fitThreshold")).toBe("6")
   })
 })

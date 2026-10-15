@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Valida un PDF, extrae su texto sin un modelo y, en paralelo, guarda chunks embedados y un estado estructurado. Cada carga es una ejecución nueva, sin memoria de mensajes.
+Valida un PDF, extrae su texto sin un modelo y lo guarda como `flat_text` dentro de un `profile`. El resto de los campos lo pide una cadena lineal de LangChain. Cada carga es una ejecución nueva, sin memoria de mensajes.
 
 ## ADDED Requirements
 
@@ -25,67 +25,34 @@ El sistema SHALL ejecutar cada carga con su propio contexto. SHALL NOT guardar m
 - **THEN** la ejecución nueva no recibe los mensajes ni el texto de la carga anterior
 
 ### Requirement: No guardar el PDF
-El sistema SHALL NOT guardar el archivo PDF. Tras una carga válida, SHALL conservar solo los chunks, sus embeddings y el estado estructurado.
+El sistema SHALL NOT guardar el archivo PDF. Tras una carga válida, SHALL conservar el `profile`, incluido `flat_text`, y SHALL NOT conservar chunks ni vectores.
 
 #### Scenario: Carga válida
 - **WHEN** el usuario carga un PDF válido
-- **THEN** el archivo PDF no queda almacenado
-
-### Requirement: Generar chunks por aspecto del CV
-Con el texto ya extraído, el sistema SHALL pedir a Gemini chunks según aspectos del CV, entre ellos experiencia, educación y perfil. El sistema SHALL NOT partir ese texto por un tamaño fijo de caracteres.
-
-#### Scenario: CV con varias secciones
-- **WHEN** el texto contiene experiencia, educación y perfil
-- **THEN** los chunks distinguen esos aspectos y cada uno guarda su texto
-
-#### Scenario: El modelo no genera chunks
-- **WHEN** Gemini no devuelve chunks utilizables
-- **THEN** el sistema aborta toda la carga, muestra un error claro y no guarda embeddings ni estado
-
-### Requirement: Guardar chunks con embeddings
-El sistema SHALL obtener un embedding por chunk con la API key de Gemini y SHALL guardar en la base local el texto de cada chunk, su aspecto y su embedding.
-
-#### Scenario: Chunks generados
-- **WHEN** existen chunks generados y los embeddings se guardan
-- **THEN** la base local contiene cada chunk con su texto, su aspecto y su embedding
-
-#### Scenario: Falla el embedding o su guardado
-- **WHEN** falla el embedding de un chunk o su escritura en la base
-- **THEN** el sistema aborta toda la carga, muestra un error claro y no deja guardado el estado de esa carga
-
-#### Scenario: Carga sin API key
-- **WHEN** no hay una API key de Gemini y el usuario carga un PDF
-- **THEN** el sistema no guarda chunks ni estado e indica que falta la API key
-
-### Requirement: Conservar la API key en el navegador
-El sistema SHALL guardar la API key de Gemini en el navegador de quien la escribió y reutilizarla en cargas posteriores. El sistema SHALL NOT pedir un project id ni incluir una API key en el sitio publicado.
-
-#### Scenario: Visita posterior con clave guardada
-- **WHEN** el usuario escribió una API key y vuelve a abrir la página en el mismo navegador
-- **THEN** el sistema reutiliza esa clave sin volver a pedirla
-
-#### Scenario: Ajustes del modelo
-- **WHEN** el usuario abre los ajustes del modelo
-- **THEN** el sistema pide la API key de Gemini y no pide un project id
-
-#### Scenario: Sitio publicado sin clave
-- **WHEN** se publica el sitio
-- **THEN** los archivos publicados no contienen una API key
+- **THEN** el archivo PDF no queda almacenado y `flat_text` queda guardado
 
 ### Requirement: Guardar el estado estructurado
-El sistema SHALL guardar un único estado local con `tech_skills`, `soft_skills`, `languages`, `experience_time` y `education`. `languages` SHALL incluir cada idioma humano y su nivel. `education` SHALL incluir los títulos de graduación. `experience_time` SHALL ser un número con como máximo un decimal.
+El sistema SHALL guardar un único `profile` con `tech_skills`, `soft_skills`, `languages`, `experience_time`, `education` y `flat_text`. `languages` SHALL incluir cada idioma humano y su nivel. `education` SHALL incluir los títulos de graduación. `experience_time` SHALL ser un número con como máximo un decimal. `flat_text` SHALL ser el texto extraído del PDF, sin un modelo.
 
 #### Scenario: CV con habilidades, idiomas y títulos
 - **WHEN** el texto del CV menciona habilidades técnicas, habilidades blandas, idiomas y títulos
-- **THEN** el estado guardado lista esas habilidades, cada idioma con su nivel y esos títulos
+- **THEN** el `profile` guardado lista esas habilidades, cada idioma con su nivel y esos títulos
+
+#### Scenario: Texto plano guardado
+- **WHEN** una carga válida extrajo texto del PDF
+- **THEN** `flat_text` es ese texto, tal cual se extrajo
 
 #### Scenario: Falla la extracción estructurada
 - **WHEN** el modelo no devuelve el estado utilizable
-- **THEN** el sistema aborta toda la carga, muestra un error claro y no guarda chunks ni estado de esa carga
+- **THEN** el sistema aborta toda la carga, muestra un error claro y no guarda `profile` de esa carga
 
 #### Scenario: Falla el guardado del estado
 - **WHEN** el estado se obtuvo y su escritura en la base falla
-- **THEN** el sistema aborta toda la carga, muestra un error claro y no deja los chunks de esa carga guardados
+- **THEN** el sistema aborta toda la carga, muestra un error claro y no deja `profile` de esa carga guardado
+
+#### Scenario: Carga sin API key
+- **WHEN** no hay una API key de Gemini y el usuario carga un PDF
+- **THEN** el sistema no guarda `profile` e indica que falta la API key
 
 ### Requirement: Redondear los años de experiencia
 `experience_time` SHALL expresar años de experiencia en el sector. Si el CV indica años y meses, menos de 6 meses sobrantes SHALL dejar el entero de años, y 6 meses o más SHALL subir al año siguiente.
@@ -103,39 +70,54 @@ El sistema SHALL guardar un único estado local con `tech_skills`, `soft_skills`
 - **THEN** `experience_time` guardado es 1.5
 
 ### Requirement: Conservar un solo perfil
-El sistema SHALL guardar exactamente un perfil activo en el navegador y SHALL reutilizar sus chunks, embeddings y estado al volver a abrir la página.
+El sistema SHALL guardar exactamente un `profile` activo en el navegador y SHALL reutilizarlo, incluido `flat_text`, al volver a abrir la página. El `profile` SHALL NOT incluir chunks ni vectores.
 
 #### Scenario: Visita posterior
-- **WHEN** ya existe un perfil y el usuario vuelve a abrir la página
-- **THEN** el sistema sigue usando esos chunks, embeddings y ese estado
+- **WHEN** ya existe un `profile` y el usuario vuelve a abrir la página
+- **THEN** el sistema sigue usando ese `profile`, con su `flat_text`
 
 ### Requirement: Reemplazar el perfil
-El sistema SHALL reemplazar chunks, embeddings y estado cuando una carga nueva termina con éxito, y SHALL usar solo el perfil nuevo después.
+El sistema SHALL reemplazar el `profile` completo, incluido `flat_text`, cuando una carga nueva termina con éxito, y SHALL usar solo el perfil nuevo después.
 
 #### Scenario: Segundo PDF válido
-- **WHEN** ya existe un perfil y el usuario carga otro PDF válido
-- **THEN** el sistema descarta el perfil anterior y conserva solo el nuevo
+- **WHEN** ya existe un `profile` y el usuario carga otro PDF válido
+- **THEN** el sistema descarta el perfil anterior y conserva solo el `profile` nuevo
 
 ### Requirement: Rechazar un PDF sin texto
-El sistema SHALL rechazar un PDF sin texto extraíble y SHALL dejar intactos los chunks, embeddings y estado anteriores.
+El sistema SHALL rechazar un PDF sin texto extraíble y SHALL dejar intacto el `profile` anterior.
 
 #### Scenario: PDF escaneado sin texto
 - **WHEN** el PDF no contiene texto extraíble
 - **THEN** el sistema aborta antes de llamar al modelo, muestra un error claro y conserva el perfil que ya existía, si había uno
 
-### Requirement: Terminar solo si las dos ramas quedan guardadas
-El sistema SHALL extraer el estado y generar los chunks en paralelo después de obtener el texto. SHALL informar que la carga salió bien solo cuando ambos quedaron guardados. Si una rama falla, SHALL descartar lo que la otra haya escrito en esa carga.
+### Requirement: Informar éxito solo con el estado guardado
+El sistema SHALL informar que la carga salió bien solo cuando el `profile`, incluido `flat_text`, quedó guardado. Si ese guardado no termina, SHALL conservar el perfil anterior y SHALL NOT informar éxito.
 
-#### Scenario: Las dos ramas terminan
-- **WHEN** los chunks embedados y el estado estructurado se guardaron
+#### Scenario: El estado queda guardado
+- **WHEN** el `profile` de la carga, incluido `flat_text`, se guardó
 - **THEN** el sistema informa al usuario que la carga salió bien
 
-#### Scenario: Una rama falla después de que la otra guardó
-- **WHEN** una rama ya escribió en la base y la otra falla
-- **THEN** el sistema quita lo escrito en esa carga, conserva el perfil anterior y no informa éxito
+#### Scenario: El estado no queda guardado
+- **WHEN** la carga no logra guardar el `profile`
+- **THEN** el sistema conserva el perfil anterior y no informa éxito
+
+### Requirement: Conservar la API key en el navegador
+El sistema SHALL guardar la API key de Gemini en el navegador de quien la escribió y reutilizarla en cargas posteriores. El sistema SHALL NOT pedir un project id ni incluir una API key en el sitio publicado. El campo de la clave SHALL estar en la fila de carga del CV y SHALL NOT estar en los ajustes.
+
+#### Scenario: Visita posterior con clave guardada
+- **WHEN** el usuario escribió una API key y vuelve a abrir la página en el mismo navegador
+- **THEN** el sistema reutiliza esa clave sin volver a pedirla
+
+#### Scenario: Fila de carga
+- **WHEN** el usuario ve la carga del CV
+- **THEN** el campo de la clave está en esa fila y los ajustes no piden la clave ni un project id
+
+#### Scenario: Sitio publicado sin clave
+- **WHEN** se publica el sitio
+- **THEN** los archivos publicados no contienen una API key
 
 ### Requirement: Informar si hay un perfil
-El sistema SHALL indicar si hay un perfil activo y SHALL mostrar el estado estructurado, sin exigir el PDF original.
+El sistema SHALL indicar si hay un `profile` activo y SHALL mostrar su estado, sin exigir el PDF original.
 
 #### Scenario: Consulta del perfil
 - **WHEN** el usuario abre el perfil y hay un estado guardado
