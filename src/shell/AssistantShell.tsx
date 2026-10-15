@@ -21,8 +21,9 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { MISSING_GEMINI_KEY, readGeminiApiKey, writeGeminiApiKey } from "@/ai/gemini"
+import { LOAD_READY_LABEL, LOAD_STEP_LABELS } from "@/profile/load-progress"
 import { defaultLoadCv } from "@/profile/load-cv"
-import type { CvLoader, Profile } from "@/profile/types"
+import type { CvLoader, LoadProgress, Profile } from "@/profile/types"
 
 const CLOSED_CONVERSATION = "La conversación se abre cuando hay un perfil."
 
@@ -37,6 +38,7 @@ export function AssistantShell({ loadCv = defaultLoadCv }: AssistantShellProps) 
   const [apiKey, setApiKey] = useState(readGeminiApiKey)
   const [draft, setDraft] = useState("")
   const [loading, setLoading] = useState(false)
+  const [progress, setProgress] = useState<LoadProgress | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [errorBeside, setErrorBeside] = useState<ErrorBeside | null>(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
@@ -74,24 +76,42 @@ export function AssistantShell({ loadCv = defaultLoadCv }: AssistantShellProps) 
     setLoading(true)
     setError(null)
     setErrorBeside(null)
+    setProgress({
+      completed: 0,
+      total: LOAD_STEP_LABELS.length,
+      label: LOAD_STEP_LABELS[0],
+      status: "active",
+    })
 
     try {
-      const result = await loadCv(file, key)
+      const result = await loadCv(file, key, (next) => {
+        if (mountedRef.current) setProgress(next)
+      })
       if (!mountedRef.current) return
       if (result.ok) {
         setProfile(result.profile)
         setDraft("")
         setError(null)
         setErrorBeside(null)
+        setProgress({
+          completed: LOAD_STEP_LABELS.length,
+          total: LOAD_STEP_LABELS.length,
+          label: LOAD_READY_LABEL,
+          status: "done",
+        })
         toast.success("CV cargado.")
       } else {
         setError(result.message)
         setErrorBeside(beside)
+        setProgress((current) =>
+          current ? { ...current, status: "error" } : current,
+        )
       }
     } catch {
       if (!mountedRef.current) return
       setError("No se pudo cargar el CV.")
       setErrorBeside(beside)
+      setProgress((current) => (current ? { ...current, status: "error" } : current))
     } finally {
       loadingRef.current = false
       if (mountedRef.current) setLoading(false)
@@ -221,7 +241,11 @@ export function AssistantShell({ loadCv = defaultLoadCv }: AssistantShellProps) 
           </Card>
         </section>
 
-        <section aria-label="Perfil" className="flex min-w-0 flex-1 flex-col p-4 md:min-h-0">
+        <section
+          aria-label="Perfil"
+          aria-busy={loading}
+          className="flex min-w-0 flex-1 flex-col p-4 md:min-h-0"
+        >
           <div className="mb-4 flex shrink-0 flex-col gap-2">
             <div className="flex items-end gap-2">
               <div className="flex min-w-0 flex-1 flex-col gap-2">
@@ -246,7 +270,7 @@ export function AssistantShell({ loadCv = defaultLoadCv }: AssistantShellProps) 
                   onClick={openFilePicker}
                 >
                   <Upload aria-hidden="true" className="size-4" />
-                  Reemplazar CV
+                  {loading ? "Cargando CV…" : "Reemplazar CV"}
                 </Button>
               ) : (
                 <Button
@@ -256,10 +280,11 @@ export function AssistantShell({ loadCv = defaultLoadCv }: AssistantShellProps) 
                   onClick={openFilePicker}
                 >
                   <Upload aria-hidden="true" className="size-4" />
-                  Cargar CV
+                  {loading ? "Cargando CV…" : "Cargar CV"}
                 </Button>
               )}
             </div>
+            {progress ? <LoadProgressBar progress={progress} /> : null}
             {error && (errorBeside === "cargar" || errorBeside === "reemplazar") ? (
               <Alert>
                 <AlertDescription>{error}</AlertDescription>
@@ -285,12 +310,15 @@ export function AssistantShell({ loadCv = defaultLoadCv }: AssistantShellProps) 
                 </div>
               </div>
             </CardHeader>
-            <CardContent className="flex min-h-0 flex-1 flex-col">
+            <CardContent className="flex min-h-0 flex-1 flex-col gap-4">
+              {progress && progress.status !== "done" ? (
+                <LoadStepList progress={progress} compact={profile !== null} />
+              ) : null}
               {profile ? (
                 <ScrollArea className="min-h-0 flex-1">
                   <ProfileStatus profile={profile} />
                 </ScrollArea>
-              ) : (
+              ) : progress && progress.status !== "done" ? null : (
                 <div className="flex min-h-64 flex-1 flex-col items-center justify-center gap-3 rounded-[var(--radio-tarjeta)] border border-dashed border-[var(--cielo)] bg-[var(--cielo-suave)] px-6 py-8 text-center">
                   <span className="grid size-14 place-items-center rounded-2xl bg-white text-[var(--cielo)] shadow-[0_10px_24px_-16px_var(--cielo)]">
                     <FileText aria-hidden="true" className="size-7" />
@@ -347,6 +375,73 @@ export function AssistantShell({ loadCv = defaultLoadCv }: AssistantShellProps) 
           },
         }}
       />
+    </div>
+  )
+}
+
+function LoadProgressBar({ progress }: { progress: LoadProgress }) {
+  const failed = progress.status === "error"
+  const lead = progress.status === "active" ? 0.35 : 0
+  const percent = Math.min(100, Math.max(failed ? 8 : 0, ((progress.completed + lead) / progress.total) * 100))
+  const tone = failed ? "bg-[var(--error)]" : progress.status === "done" ? "bg-[var(--ok)]" : "bg-[var(--teal)]"
+  const labelTone = failed ? "text-[var(--error)]" : "text-[var(--teal)]"
+
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex items-center justify-between gap-3">
+        <p className={`text-sm font-medium ${labelTone}`}>{progress.label}</p>
+        <p className="texto-meta">
+          {progress.completed} de {progress.total}
+        </p>
+      </div>
+      <div
+        role="progressbar"
+        aria-valuemin={0}
+        aria-valuemax={progress.total}
+        aria-valuenow={progress.completed}
+        aria-valuetext={progress.label}
+        className="h-2.5 overflow-hidden rounded-full bg-[var(--superficie-2)]"
+      >
+        <div className={`h-full rounded-full transition-[width] duration-300 ${tone}`} style={{ width: `${percent}%` }} />
+      </div>
+    </div>
+  )
+}
+
+function LoadStepList({ progress, compact }: { progress: LoadProgress; compact: boolean }) {
+  const stopped = progress.status === "error"
+  return (
+    <div
+      className={`flex flex-col justify-center rounded-[var(--radio-tarjeta)] border px-6 py-6 ${
+        compact ? "" : "min-h-64 flex-1"
+      } ${stopped ? "border-[var(--error)]/30 bg-[var(--error-suave)]" : "border-[var(--teal)]/25 bg-[var(--teal-suave)]"}`}
+    >
+      <p className={`font-semibold ${stopped ? "text-[var(--error)]" : "text-[var(--teal)]"}`}>
+        {stopped ? "La carga se detuvo" : "Cargando el CV"}
+      </p>
+      <ol aria-label="Pasos de la carga" className="mt-4 flex flex-col gap-2">
+        {LOAD_STEP_LABELS.map((label, index) => {
+          const failed = progress.status === "error" && index === progress.completed
+          const done = index < progress.completed
+          const active = progress.status === "active" && index === progress.completed
+          const mark = failed ? "!" : done ? "✓" : String(index + 1)
+          const row = failed
+            ? "border-[var(--error)] bg-[var(--error-suave)] text-[var(--error)]"
+            : done
+              ? "border-[var(--ok)]/30 bg-white text-[var(--ok)]"
+              : active
+                ? "border-[var(--teal)] bg-white font-semibold text-[var(--teal)]"
+                : "border-[var(--linea)] bg-white/70 text-[var(--tinta-suave)]"
+          return (
+            <li key={label} aria-current={active ? "step" : undefined} className={`flex items-center gap-3 rounded-[var(--radio-control)] border px-3 py-2 ${row}`}>
+              <span aria-hidden="true" className="grid size-6 shrink-0 place-items-center rounded-full text-sm">
+                {mark}
+              </span>
+              {label}
+            </li>
+          )
+        })}
+      </ol>
     </div>
   )
 }
@@ -408,20 +503,20 @@ function ProfileStatus({ profile }: { profile: Profile }) {
           icon={Sparkles}
           tone="cielo"
           label="Habilidades técnicas"
-          value={profile.techSkills.join(", ")}
+          value={profile.tech_skills.join(", ")}
         />
         <ProfileField
           icon={UserRound}
           tone="violeta"
           label="Habilidades blandas"
-          value={profile.softSkills.join(", ")}
+          value={profile.soft_skills.join(", ")}
         />
         <ProfileField icon={Languages} tone="ambar" label="Idiomas" value={languages} />
         <ProfileField
           icon={Briefcase}
           tone="teal"
           label="Experiencia"
-          value={profile.experienceTime === null ? "" : `${profile.experienceTime} años`}
+          value={profile.experience_time === null ? "" : `${profile.experience_time} años`}
         />
         <ProfileField
           icon={GraduationCap}

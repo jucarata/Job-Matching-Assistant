@@ -1,7 +1,7 @@
 import { ChatGoogleGenerativeAI } from "@langchain/google-genai"
 
 export const GEMINI_API_KEY_STORAGE = "geminiApiKey"
-export const GEMINI_MODEL = "gemini-3.5-flash"
+export const GEMINI_MODEL = "gemini-3.8-flash"
 export const MISSING_GEMINI_KEY = "Falta la clave de Gemini."
 
 export function readGeminiApiKey(): string {
@@ -26,5 +26,6 @@ export function createGeminiChat(apiKey: string) {
   return new ChatGoogleGenerativeAI({
     model: GEMINI_MODEL,
     apiKey: key,
+    maxRetries: 0,
   })
 }

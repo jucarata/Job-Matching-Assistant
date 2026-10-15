@@ -7,9 +7,9 @@
 
 ## 2. Profile y cadena de carga
 
-- [ ] 2.1 Añadir `@langchain/google-genai`, `@langchain/core` y `pdfjs-dist`. Verificar que `package.json` los declara y que `npm test` sigue pasando.
-- [ ] 2.2 Cambiar `src/profile/types.ts` al `profile` en snake_case, con `flat_text: string` y `experience_time: number | null`. Verificar que `npm test` compila y que el tipo ya no usa `techSkills`, `softSkills` ni `experienceTime`.
-- [ ] 2.3 Implementar la cadena de carga: validar el PDF, extraer el texto con `pdfjs-dist`, asignar ese texto a `flat_text`, pedir el resto de campos a `gemini-3.5-flash` y redondear `experience_time` en código. Si falla la validación, el texto, el modelo o el guardado, no escribir el `profile` de esa carga. Verificar con un cliente falso: PDF con texto cuyo `flat_text` es ese texto, archivo que no es PDF, PDF sin texto sin llamada al modelo, fallo del modelo, 2 años y 3 meses quedan en 2, 2 años y 6 meses quedan en 3, y 1.5 años queda en 1.5.
+- [x] 2.1 Añadir `@langchain/google-genai`, `@langchain/core` y `pdfjs-dist`. Verificar que `package.json` los declara y que `npm test` sigue pasando.
+- [x] 2.2 Cambiar `src/profile/types.ts` al `profile` en snake_case, con `flat_text: string` y `experience_time: number | null`. Verificar que `npm test` compila y que el tipo ya no usa `techSkills`, `softSkills` ni `experienceTime`.
+- [x] 2.3 Implementar la cadena de carga: validar el PDF, extraer el texto con `pdfjs-dist`, asignar ese texto a `flat_text`, pedir el resto de campos a `gemini-3.5-flash` y redondear `experience_time` en código. Si falla la validación, el texto, el modelo o el guardado, no escribir el `profile` de esa carga. Verificar con un cliente falso: PDF con texto cuyo `flat_text` es ese texto, archivo que no es PDF, PDF sin texto sin llamada al modelo, fallo del modelo, 2 años y 3 meses quedan en 2, 2 años y 6 meses quedan en 3, y 1.5 años queda en 1.5.
 - [ ] 2.4 Guardar un solo `profile` en IndexedDB, sin almacén `chunks` y sin el archivo PDF. Una carga nueva que termina bien reemplaza el anterior, incluido `flat_text`. Verificar con una base de prueba: éxito, reemplazo, fallo de escritura que conserva el anterior, y que el registro no tiene chunks ni embeddings.
 
 ## 3. Clave y veredicto

@@ -4,22 +4,24 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 import css from "../index.css?raw"
 import { toast } from "sonner"
 import { AssistantShell } from "@/shell/AssistantShell"
-import type { CvLoader, LoadResult, Profile } from "@/profile/types"
+import type { CvLoader, LoadProgress, LoadResult, Profile } from "@/profile/types"
 
 const profileA: Profile = {
-  techSkills: ["React"],
-  softSkills: ["Comunicación"],
+  tech_skills: ["React"],
+  soft_skills: ["Comunicación"],
   languages: [{ language: "Español", level: "nativo" }],
-  experienceTime: 3,
+  experience_time: 3,
   education: ["Ingeniería"],
+  flat_text: "CV de React",
 }
 
 const profileB: Profile = {
-  techSkills: ["Golang"],
-  softSkills: ["Mentoría"],
+  tech_skills: ["Golang"],
+  soft_skills: ["Mentoría"],
   languages: [{ language: "Inglés", level: "avanzado" }],
-  experienceTime: 1.5,
+  experience_time: 1.5,
   education: ["Maestría"],
+  flat_text: "CV de Golang",
 }
 
 function deferred<T>() {
@@ -146,6 +148,62 @@ describe("pantalla sin perfil", () => {
     expect(profile.contains(alert)).toBe(true)
     expect(profile.contains(screen.getByRole("button", { name: "Cargar CV" }))).toBe(true)
     expect(screen.queryByRole("region", { name: "Estado del perfil" })).not.toBeInTheDocument()
+  })
+
+  it("la barra avanza con los pasos y el error deja el botón otra vez usable", async () => {
+    const { calls, user } = renderShell()
+    await chooseFile(user)
+
+    expect(screen.getByRole("button", { name: "Cargando CV…" })).toBeDisabled()
+    const bar = screen.getByRole("progressbar")
+    expect(bar).toHaveAttribute("aria-valuemin", "0")
+    expect(bar).toHaveAttribute("aria-valuemax", "6")
+    expect(bar).toHaveAttribute("aria-valuenow", "0")
+    expect(bar).toHaveAttribute("aria-valuetext", "Validar el PDF")
+    expect(screen.getByRole("list", { name: "Pasos de la carga" })).toBeInTheDocument()
+    expect(screen.getByText("Cargando el CV")).toBeInTheDocument()
+
+    await finishLoad(calls[0], { ok: false, message: "El PDF no tiene texto." })
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("El PDF no tiene texto.")
+    expect(screen.getByRole("button", { name: "Cargar CV" })).toBeEnabled()
+    expect(screen.getByText("La carga se detuvo")).toBeInTheDocument()
+    expect(screen.queryByRole("region", { name: "Estado del perfil" })).not.toBeInTheDocument()
+  })
+
+  it("completa la barra cuando la carga termina bien", async () => {
+    localStorage.removeItem("geminiApiKey")
+    let report: ((progress: LoadProgress) => void) | undefined
+    const pending = deferred<LoadResult>()
+    const loadCv: CvLoader = (_file, _key, onProgress) => {
+      report = onProgress
+      return pending.promise
+    }
+    const user = userEvent.setup()
+    render(<AssistantShell loadCv={loadCv} />)
+    await user.type(screen.getByLabelText("Clave de Gemini"), "clave-de-prueba")
+    const file = new File(["cv"], "cv.pdf", { type: "application/pdf" })
+    await act(async () => {
+      await user.upload(fileInput(), file)
+    })
+
+    await act(async () => {
+      report?.({
+        completed: 3,
+        total: 6,
+        label: "Leer los datos con Gemini",
+        status: "active",
+      })
+    })
+    expect(screen.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "3")
+    expect(screen.getByRole("progressbar")).toHaveAttribute("aria-valuetext", "Leer los datos con Gemini")
+
+    await finishLoad(pending, { ok: true, profile: profileA })
+
+    expect(screen.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "6")
+    expect(screen.getByRole("progressbar")).toHaveAttribute("aria-valuetext", "CV listo")
+    expect(screen.getByText("React")).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "Reemplazar CV" })).toBeEnabled()
   })
 
   it("guarda la clave y la rellena al abrir la página", async () => {

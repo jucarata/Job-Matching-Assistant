@@ -1,25 +1,40 @@
 import { MISSING_GEMINI_KEY } from "@/ai/gemini"
+import type { FieldChain } from "@/ai/load-chain"
 import { createLoadChain } from "@/ai/load-chain"
-import type { CvLoader } from "./types"
+import { LoadStepError, UNUSABLE_PROFILE } from "@/profile/load-errors"
+import { createLoadPipeline } from "@/profile/load-pipeline"
+import type { CvLoader } from "@/profile/types"
 
-const LOAD_NOT_READY = "La carga del CV todavía no está disponible."
+function failureMessage(error: unknown): string {
+  let current: unknown = error
+  while (current instanceof Error) {
+    if (current instanceof LoadStepError) return current.message
+    if (current.cause === undefined) break
+    current = current.cause
+  }
+  return UNUSABLE_PROFILE
+}
 
-type LoadChain = ReturnType<typeof createLoadChain>
-
-/**
- * La cadena de carga se arma con la clave de Gemini.
- * La extracción del PDF todavía no la invoca.
- */
 export function createCvLoader(
-  createChain: (apiKey: string) => LoadChain = createLoadChain,
+  createChain: (apiKey: string) => FieldChain = createLoadChain,
+  extractText?: (file: File) => Promise<string>,
 ): CvLoader {
-  return async (_file, apiKey) => {
+  return async (file, apiKey, onProgress) => {
     const key = apiKey.trim()
-    if (!key) {
-      return { ok: false, message: MISSING_GEMINI_KEY }
+    if (!key) return { ok: false, message: MISSING_GEMINI_KEY }
+
+    try {
+      const pipeline = createLoadPipeline({
+        apiKey: key,
+        createChain,
+        extractText,
+        onProgress,
+      })
+      const profile = await pipeline.invoke(file)
+      return { ok: true, profile }
+    } catch (error) {
+      return { ok: false, message: failureMessage(error) }
     }
-    createChain(key)
-    return { ok: false, message: LOAD_NOT_READY }
   }
 }
 

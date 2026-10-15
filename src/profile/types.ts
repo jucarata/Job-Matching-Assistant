@@ -4,15 +4,27 @@ export type ProfileLanguage = {
 }
 
 export type Profile = {
-  techSkills: string[]
-  softSkills: string[]
+  tech_skills: string[]
+  soft_skills: string[]
   languages: ProfileLanguage[]
-  experienceTime: number | null
+  experience_time: number | null
   education: string[]
+  flat_text: string
 }
 
 export type LoadResult =
   | { ok: true; profile: Profile }
   | { ok: false; message: string }
 
-export type CvLoader = (file: File, apiKey: string) => Promise<LoadResult>
+export type LoadProgress = {
+  completed: number
+  total: number
+  label: string
+  status: "active" | "done" | "error"
+}
+
+export type CvLoader = (
+  file: File,
+  apiKey: string,
+  onProgress?: (progress: LoadProgress) => void,
+) => Promise<LoadResult>

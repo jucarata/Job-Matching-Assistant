@@ -11,6 +11,23 @@ import {
 import { createLoadChain } from "@/ai/load-chain"
 import { createCvLoader } from "@/profile/load-cv"
 
+function findChatModel(runnable: unknown): ChatGoogleGenerativeAI | undefined {
+  if (runnable instanceof ChatGoogleGenerativeAI) return runnable
+  if (!runnable || typeof runnable !== "object") return undefined
+  const record = runnable as { bound?: unknown; steps?: unknown[] }
+  if (record.bound) {
+    const found = findChatModel(record.bound)
+    if (found) return found
+  }
+  if (Array.isArray(record.steps)) {
+    for (const step of record.steps) {
+      const found = findChatModel(step)
+      if (found) return found
+    }
+  }
+  return undefined
+}
+
 afterEach(() => {
   localStorage.removeItem(GEMINI_API_KEY_STORAGE)
 })
@@ -32,12 +49,12 @@ describe("clave de Gemini", () => {
   it("asocia la clave con la cadena de carga", () => {
     const chain = createLoadChain("  clave-de-prueba  ")
     expect(chain).toBeInstanceOf(RunnableSequence)
-    const sequence = chain as RunnableSequence
-    const model = sequence.steps.at(-1)
+    const model = findChatModel(chain)
     expect(model).toBeInstanceOf(ChatGoogleGenerativeAI)
     expect(model).toMatchObject({
       apiKey: "clave-de-prueba",
       model: GEMINI_MODEL,
+      caller: { maxRetries: 0 },
     })
     expect(model).not.toHaveProperty("project")
     expect(model).not.toHaveProperty("projectId")
