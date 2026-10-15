@@ -6,6 +6,7 @@ export const MODEL_STEP_TIMEOUT = "Se agotó el tiempo al leer los datos con Gem
 export const GEMINI_UNAVAILABLE =
   "Gemini respondió 503 UNAVAILABLE: no hay capacidad para atender el modelo."
 export const UNUSABLE_PROFILE = "No se pudo leer el estado del CV."
+export const PROFILE_SAVE_FAILED = "No se pudo guardar el perfil."
 
 export class LoadStepError extends Error {
   constructor(message: string) {

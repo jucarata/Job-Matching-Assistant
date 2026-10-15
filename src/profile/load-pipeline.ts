@@ -7,7 +7,15 @@ import {
   type FieldChain,
 } from "@/ai/load-chain"
 import { roundExperienceTime } from "@/profile/experience"
-import { LoadStepError, GEMINI_UNAVAILABLE, MODEL_STEP_TIMEOUT, PDF_STEP_TIMEOUT, UNUSABLE_PROFILE } from "@/profile/load-errors"
+import {
+  LoadStepError,
+  GEMINI_UNAVAILABLE,
+  MODEL_STEP_TIMEOUT,
+  PDF_STEP_TIMEOUT,
+  PROFILE_SAVE_FAILED,
+  UNUSABLE_PROFILE,
+} from "@/profile/load-errors"
+import { saveProfile } from "@/profile/profile-store"
 import {
   LOAD_READY_LABEL,
   LOAD_STEP_LABELS,
@@ -33,6 +41,7 @@ export type LoadPipelineOptions = {
   apiKey: string
   extractText?: (file: File) => Promise<string>
   createChain?: (apiKey: string) => FieldChain
+  persistProfile?: (profile: Profile) => Promise<void>
   onProgress?: (progress: LoadProgress) => void
 }
 
@@ -146,9 +155,24 @@ export function composeProfile(draft: RoundedDraft): Profile {
   }
 }
 
+async function storeComposedProfile(
+  draft: RoundedDraft,
+  persist: (profile: Profile) => Promise<void>,
+): Promise<Profile> {
+  const profile = composeProfile(draft)
+  try {
+    await persist(profile)
+  } catch (error) {
+    if (error instanceof LoadStepError) throw error
+    throw new LoadStepError(PROFILE_SAVE_FAILED)
+  }
+  return profile
+}
+
 export function createLoadPipeline(options: LoadPipelineOptions) {
   const readText = options.extractText ?? extractPdfText
   const createChain = options.createChain ?? createLoadChain
+  const persist = options.persistProfile ?? saveProfile
   const extractFields = (text: string) => createChain(options.apiKey).invoke({ text })
   const { onProgress } = options
 
@@ -176,6 +200,8 @@ export function createLoadPipeline(options: LoadPipelineOptions) {
       ),
     ),
     RunnableLambda.from(trackStep(4, applyExperienceRounding, onProgress)),
-    RunnableLambda.from(trackStep(5, composeProfile, onProgress)),
+    RunnableLambda.from(
+      trackStep(5, (draft: RoundedDraft) => storeComposedProfile(draft, persist), onProgress),
+    ),
   ])
 }

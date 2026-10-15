@@ -1,10 +1,11 @@
 import { describe, expect, it, vi } from "vitest"
 import type { FieldChain } from "@/ai/load-chain"
 import { roundExperienceTime } from "@/profile/experience"
-import { EMPTY_PDF, GEMINI_UNAVAILABLE, NOT_A_PDF, PDF_READ_FAILED, UNUSABLE_PROFILE } from "@/profile/load-errors"
+import { EMPTY_PDF, GEMINI_UNAVAILABLE, NOT_A_PDF, PDF_READ_FAILED, PROFILE_SAVE_FAILED, UNUSABLE_PROFILE } from "@/profile/load-errors"
 import { createCvLoader } from "@/profile/load-cv"
 import { extractPdfText } from "@/profile/pdf-text"
-import type { LoadProgress } from "@/profile/types"
+import { readProfile, readProfileStorage } from "@/profile/profile-store"
+import type { LoadProgress, Profile } from "@/profile/types"
 import { GEMINI_MODEL } from "@/ai/gemini"
 
 function escapePdf(text: string) {
@@ -206,5 +207,91 @@ describe("cadena de carga", () => {
 
     expect(result).toEqual({ ok: false, message: PDF_READ_FAILED })
     expect(calls).toEqual([])
+  })
+})
+
+const storedProfileFields = [
+  "education",
+  "experience_time",
+  "flat_text",
+  "languages",
+  "soft_skills",
+  "tech_skills",
+]
+
+function storedProfile(flatText: string, experience: number): Profile {
+  return {
+    tech_skills: ["TypeScript"],
+    soft_skills: ["Comunicación"],
+    languages: [{ language: "Español", level: "nativo" }],
+    education: ["Ingeniería"],
+    experience_time: experience,
+    flat_text: flatText,
+  }
+}
+
+describe("perfil guardado", () => {
+  it("guarda un solo profile, lo reemplaza y no deja chunks ni embeddings", async () => {
+    const file = new File(["cv"], "cv.pdf", { type: "application/pdf" })
+    const first = createCvLoader(() => fakeChain(extracted(2, 3), []), async () => "texto uno")
+    const second = createCvLoader(() => fakeChain(extracted(1.5, null), []), async () => "texto dos")
+
+    const saved = await first(file, "clave")
+    const created = await readProfileStorage()
+
+    expect(saved).toMatchObject({ ok: true, profile: storedProfile("texto uno", 2) })
+    expect(created.storeNames).toEqual(["profile"])
+    expect(created.records).toEqual([storedProfile("texto uno", 2)])
+    expect(Object.keys(created.records[0] as Profile).sort()).toEqual(storedProfileFields)
+    expect(created.records[0]).not.toHaveProperty("embedding")
+    expect(created.records[0]).not.toHaveProperty("chunks")
+
+    const replaced = await second(file, "clave")
+    const after = await readProfileStorage()
+
+    expect(replaced).toMatchObject({ ok: true, profile: storedProfile("texto dos", 1.5) })
+    expect(after.storeNames).toEqual(["profile"])
+    expect(after.records).toEqual([storedProfile("texto dos", 1.5)])
+    expect(await readProfile()).toEqual(storedProfile("texto dos", 1.5))
+  })
+
+  it("si la escritura falla conserva el perfil anterior y no informa éxito", async () => {
+    const file = new File(["cv"], "cv.pdf", { type: "application/pdf" })
+    const first = createCvLoader(() => fakeChain(extracted(2, 3), []), async () => "texto uno")
+    await first(file, "clave")
+    const previous = await readProfile()
+
+    const put = vi.spyOn(IDBObjectStore.prototype, "put").mockImplementation(() => {
+      throw new DOMException("QuotaExceededError")
+    })
+    try {
+      const steps: LoadProgress[] = []
+      const second = createCvLoader(() => fakeChain(extracted(1, null), []), async () => "texto dos")
+      const result = await second(file, "clave", (progress) => steps.push(progress))
+
+      expect(result).toEqual({ ok: false, message: PROFILE_SAVE_FAILED })
+      expect(result).not.toHaveProperty("profile")
+      expect(steps.at(-1)).toMatchObject({ label: "Armar el perfil", status: "error" })
+      expect(steps.some((step) => step.label === "CV listo")).toBe(false)
+    } finally {
+      put.mockRestore()
+    }
+
+    expect(await readProfile()).toEqual(previous)
+    expect(await readProfileStorage()).toMatchObject({
+      storeNames: ["profile"],
+      records: [previous],
+    })
+  })
+
+  it("una carga rechazada no borra el profile ya guardado", async () => {
+    const file = new File(["cv"], "cv.pdf", { type: "application/pdf" })
+    const loadCv = createCvLoader(() => fakeChain(extracted(2, 3), []), async () => "texto uno")
+    await loadCv(file, "clave")
+
+    const rejected = await loadCv(new File(["hola"], "nota.txt", { type: "text/plain" }), "clave")
+
+    expect(rejected).toEqual({ ok: false, message: NOT_A_PDF })
+    expect(await readProfile()).toEqual(storedProfile("texto uno", 2))
   })
 })

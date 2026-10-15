@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import css from "../index.css?raw"
 import { toast } from "sonner"
+import { createCvLoader } from "@/profile/load-cv"
 import { AssistantShell } from "@/shell/AssistantShell"
 import type { CvLoader, LoadProgress, LoadResult, Profile } from "@/profile/types"
 
@@ -354,5 +355,40 @@ describe("pantalla con perfil", () => {
     expect(profile.contains(alert)).toBe(true)
     expect(profile.contains(replace)).toBe(true)
     expect(screen.getByRole("button", { name: "Enviar" })).toBeEnabled()
+  })
+
+  it("al volver a abrir la página muestra el perfil que guardó la carga", async () => {
+    const loadCv = createCvLoader(
+      () => ({
+        invoke: async () => ({
+          tech_skills: ["React"],
+          soft_skills: ["Comunicación"],
+          languages: [{ language: "Español", level: "nativo" }],
+          education: ["Ingeniería"],
+          experience_years: 3,
+          experience_months: null,
+        }),
+      }),
+      async () => "CV de React",
+    )
+    const user = userEvent.setup()
+    const first = render(<AssistantShell loadCv={loadCv} />)
+    await user.type(screen.getByLabelText("Clave de Gemini"), "clave-de-prueba")
+    await act(async () => {
+      await user.upload(fileInput(), new File(["cv"], "cv.pdf", { type: "application/pdf" }))
+    })
+
+    expect(await screen.findByText("React")).toBeInTheDocument()
+    first.unmount()
+
+    render(<AssistantShell />)
+    expect(await screen.findByText("React")).toBeInTheDocument()
+    expect(screen.getByText("Comunicación")).toBeInTheDocument()
+    expect(screen.getByText("Español (nativo)")).toBeInTheDocument()
+    expect(screen.getByText("3 años")).toBeInTheDocument()
+    expect(screen.getByText("Ingeniería")).toBeInTheDocument()
+    expect(screen.getByLabelText("Mensaje")).toBeEnabled()
+    expect(screen.getByRole("button", { name: "Reemplazar CV" })).toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: "Cargar CV" })).not.toBeInTheDocument()
   })
 })

@@ -22,6 +22,7 @@ import { Label } from "@/components/ui/label"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { MISSING_GEMINI_KEY, readGeminiApiKey, writeGeminiApiKey } from "@/ai/gemini"
 import { LOAD_READY_LABEL, LOAD_STEP_LABELS } from "@/profile/load-progress"
+import { readProfile } from "@/profile/profile-store"
 import { defaultLoadCv } from "@/profile/load-cv"
 import type { CvLoader, LoadProgress, Profile } from "@/profile/types"
 
@@ -45,10 +46,19 @@ export function AssistantShell({ loadCv = defaultLoadCv }: AssistantShellProps) 
   const fileRef = useRef<HTMLInputElement>(null)
   const loadingRef = useRef(false)
   const mountedRef = useRef(true)
+  const profileCommitted = useRef(false)
 
   useEffect(() => {
     mountedRef.current = true
+    let cancelled = false
+    readProfile()
+      .then((saved) => {
+        if (cancelled || profileCommitted.current || !saved) return
+        setProfile(saved)
+      })
+      .catch(() => {})
     return () => {
+      cancelled = true
       mountedRef.current = false
     }
   }, [])
@@ -89,6 +99,7 @@ export function AssistantShell({ loadCv = defaultLoadCv }: AssistantShellProps) 
       })
       if (!mountedRef.current) return
       if (result.ok) {
+        profileCommitted.current = true
         setProfile(result.profile)
         setDraft("")
         setError(null)
