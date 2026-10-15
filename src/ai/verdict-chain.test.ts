@@ -24,7 +24,7 @@ const profile: Profile = {
       evidence: "frase oculta del arquitecto",
     },
   ],
-  education: ["Ingeniería"],
+  education: [{ name: "Ingeniería", issuer: "Universidad", status: null }],
   flat_text: "texto literal del cv",
 }
 
@@ -134,6 +134,54 @@ describe("cadena de veredicto", () => {
     expect(seen[1]).not.toContain("Coincidencia previa única")
     expect(seen[1]).not.toContain("Hueco previo")
     localStorage.removeItem(FIT_THRESHOLD_STORAGE)
+  })
+
+  it("envía name, issuer y status, y el estado manda sobre flat_text", async () => {
+    const chain = createVerdictChain("clave-de-prueba")
+    expect(chain).toBeInstanceOf(RunnableSequence)
+    if (!(chain instanceof RunnableSequence)) throw new Error("La cadena no es una secuencia")
+    const prompt = chain.steps[0]
+    expect(prompt).toBeInstanceOf(ChatPromptTemplate)
+    if (!(prompt instanceof ChatPromptTemplate)) throw new Error("Falta el prompt")
+    const messages = await prompt.formatMessages({ profile: "{}", message: "Vacante" })
+    const system = String(messages[0].content)
+
+    expect(system).toContain("FINALIZADO means it was already obtained")
+    expect(system).toContain("ACTUALMENTE means it is still in progress")
+    expect(system).toContain("A null status does not assert either")
+    expect(system).toContain("status wins over flat_text")
+    expect(system).not.toMatch(/[áéíóúñ]/)
+
+    const seen: string[] = []
+    const client: VerdictClient = {
+      invoke: async (input) => {
+        seen.push(JSON.stringify(input))
+        return usable
+      },
+    }
+    const stored = {
+      name: "Ingeniero en Sistemas",
+      issuer: "Universidad ICESI",
+      status: "FINALIZADO" as const,
+      end_year: 2026,
+      end_month: 3,
+      ongoing: true,
+    }
+    const loaded = {
+      ...profile,
+      education: [stored],
+    } as Profile
+
+    await requestVerdict(client, loaded, "Vacante de sistemas")
+
+    const first = JSON.parse(seen[0]) as { profile: string }
+    const body = JSON.parse(first.profile) as { education: Array<Record<string, unknown>> }
+    expect(body.education).toEqual([
+      { name: "Ingeniero en Sistemas", issuer: "Universidad ICESI", status: "FINALIZADO" },
+    ])
+    expect(seen[0]).not.toContain("end_year")
+    expect(seen[0]).not.toContain("end_month")
+    expect(seen[0]).not.toContain("ongoing")
   })
 
   it("acepta 7.5 y rechaza un veredicto incompleto, 7.3 y 11", () => {

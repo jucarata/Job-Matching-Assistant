@@ -5,6 +5,7 @@ import { createLoadChain, extractedFieldsSchema, type FieldChain } from "@/ai/lo
 import { roundExperienceTime } from "@/profile/experience"
 import { EMPTY_PDF, GEMINI_UNAVAILABLE, NOT_A_PDF, PDF_READ_FAILED, PROFILE_SAVE_FAILED, UNUSABLE_PROFILE } from "@/profile/load-errors"
 import { createCvLoader } from "@/profile/load-cv"
+import { MODEL_STEP_TIMEOUT_MS } from "@/profile/load-progress"
 import { extractPdfText } from "@/profile/pdf-text"
 import { readProfile, readProfileStorage } from "@/profile/profile-store"
 import type { LoadProgress, Profile } from "@/profile/types"
@@ -48,9 +49,10 @@ function extracted() {
     tech_skills: ["TypeScript"],
     soft_skills: ["Comunicación"],
     languages: [{ language: "Español", level: "nativo" }],
-    education: ["Ingeniería"],
   }
 }
+
+const loadDay = () => new Date(2026, 9, 15)
 
 function proposed(
   role: string,
@@ -72,15 +74,20 @@ function loadWith(
   fields: unknown | Error,
   roles: unknown | Error,
   extractText?: (file: File) => Promise<string>,
+  education: unknown | Error = [],
+  now: () => Date = loadDay,
 ) {
   const fieldCalls: string[] = []
   const roleCalls: string[] = []
+  const educationCalls: string[] = []
   const loadCv = createCvLoader(
     () => fakeChain(fields, fieldCalls),
     extractText,
     () => fakeChain(roles, roleCalls),
+    () => fakeChain(education, educationCalls),
+    now,
   )
-  return { loadCv, fieldCalls, roleCalls }
+  return { loadCv, fieldCalls, roleCalls, educationCalls }
 }
 
 function fakeChain(response: unknown | Error, calls: string[]): FieldChain {
@@ -119,7 +126,9 @@ describe("cadena de carga", () => {
     const system = String(messages[0].content)
     expect(system).not.toContain("experience_years")
     expect(system).not.toContain("experience_months")
+    expect(system).not.toContain("education")
     expect(extractedFieldsSchema.safeParse(extracted()).success).toBe(true)
+    expect(extractedFieldsSchema.shape).not.toHaveProperty("education")
   })
 
   it("guarda el texto del PDF en flat_text y redondea la experiencia", async () => {
@@ -138,7 +147,7 @@ describe("cadena de carga", () => {
         tech_skills: ["TypeScript"],
         soft_skills: ["Comunicación"],
         languages: [{ language: "Español", level: "nativo" }],
-        education: ["Ingeniería"],
+        education: [],
         roles: [
           {
             role: "Full Stack",
@@ -288,15 +297,21 @@ describe("cadena de carga", () => {
     expect(await failed(file, "clave")).not.toHaveProperty("profile")
   })
 
-  it("avisa los siete pasos y marca Proponer los roles", async () => {
+  it("avisa los nueve pasos y marca la educación después de redondear", async () => {
     const steps: LoadProgress[] = []
     const succeeded = createCvLoader(
       () => fakeChain(extracted(), []),
       async () => "texto del cv",
       () => fakeChain([proposed("Full Stack", 1.5, null, 0.95, "texto")], []),
+      () => fakeChain([], []),
+      loadDay,
     )
     const file = new File(["cv"], "cv.pdf", { type: "application/pdf" })
+    const timers = vi.spyOn(globalThis, "setTimeout")
     const ok = await succeeded(file, "clave", (progress) => steps.push(progress))
+    const modelDelays = timers.mock.calls.filter((call) => call[1] === MODEL_STEP_TIMEOUT_MS)
+    timers.mockRestore()
+    expect(modelDelays).toHaveLength(3)
 
     expect(ok.ok).toBe(true)
     expect(steps.map((step) => step.label)).toEqual([
@@ -306,12 +321,16 @@ describe("cadena de carga", () => {
       "Leer los datos con Gemini",
       "Proponer los roles",
       "Redondear la experiencia",
+      "Leer la educación",
+      "Marcar la educación",
       "Armar el perfil",
       "CV listo",
     ])
-    expect(steps.map((step) => step.completed)).toEqual([0, 1, 2, 3, 4, 5, 6, 7])
-    expect(steps.at(-1)).toMatchObject({ completed: 7, label: "CV listo", status: "done" })
-    expect(steps[4]).toMatchObject({ label: "Proponer los roles", status: "active", total: 7 })
+    expect(steps.map((step) => step.completed)).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9])
+    expect(steps.at(-1)).toMatchObject({ completed: 9, label: "CV listo", status: "done" })
+    expect(steps[4]).toMatchObject({ label: "Proponer los roles", status: "active", total: 9 })
+    expect(steps[6]).toMatchObject({ label: "Leer la educación", status: "active", total: 9 })
+    expect(steps[7]).toMatchObject({ label: "Marcar la educación", status: "active", total: 9 })
 
     const failedSteps: LoadProgress[] = []
     const calls: string[] = []
@@ -375,7 +394,7 @@ function storedProfile(flatText: string, experience: number): Profile {
     tech_skills: ["TypeScript"],
     soft_skills: ["Comunicación"],
     languages: [{ language: "Español", level: "nativo" }],
-    education: ["Ingeniería"],
+    education: [],
     roles: [
       {
         role: "Full Stack",
@@ -397,6 +416,8 @@ function loaderWithExperience(
     () => fakeChain(extracted(), []),
     extractText,
     () => fakeChain([proposed("Full Stack", years, months, 0.95, "texto")], []),
+    () => fakeChain([], []),
+    loadDay,
   )
 }
 
@@ -487,5 +508,98 @@ describe("perfil guardado", () => {
 
     expect(rejected).toEqual({ ok: false, message: NOT_A_PDF })
     expect(await readProfile()).toEqual(storedProfile("texto uno", 2))
+  })
+})
+
+function educationItem(
+  name: string,
+  issuer: string,
+  endYear: number | null,
+  endMonth: number | null,
+  ongoing: boolean,
+) {
+  return { name, issuer, end_year: endYear, end_month: endMonth, ongoing }
+}
+
+describe("educación en la carga", () => {
+  const file = new File(["cv"], "cv.pdf", { type: "application/pdf" })
+  const text = async () => "texto del cv"
+  const roles = [proposed("Full Stack", 2, 0, 0.95, "texto")]
+
+  it("marca el 15 de octubre de 2026 y guarda name, issuer y status", async () => {
+    const { loadCv, educationCalls } = loadWith(
+      extracted(),
+      roles,
+      text,
+      [
+        educationItem("Ingeniero en Sistemas", "Universidad ICESI", 2026, 3, false),
+        educationItem("Técnico en Sistemas", "SENA", 2019, null, false),
+        educationItem("Estudio en curso", "Instituto", null, null, true),
+        educationItem("Curso suelto", "Instituto", null, null, false),
+        educationItem("Mes inválido", "Instituto", 2020, 13, false),
+        educationItem("", "Instituto", 2019, 1, false),
+      ],
+      () => new Date(2026, 9, 15),
+    )
+
+    const result = await loadCv(file, "clave")
+
+    expect(educationCalls).toEqual(["texto del cv"])
+    expect(result).toMatchObject({
+      ok: true,
+      profile: {
+        education: [
+          { name: "Ingeniero en Sistemas", issuer: "Universidad ICESI", status: "FINALIZADO" },
+          { name: "Técnico en Sistemas", issuer: "SENA", status: "FINALIZADO" },
+          { name: "Estudio en curso", issuer: "Instituto", status: "ACTUALMENTE" },
+          { name: "Curso suelto", issuer: "Instituto", status: null },
+          { name: "Mes inválido", issuer: "Instituto", status: null },
+        ],
+      },
+    })
+    const saved = JSON.stringify(result)
+    expect(saved).not.toContain("end_year")
+    expect(saved).not.toContain("end_month")
+    expect(saved).not.toContain("ongoing")
+    expect(saved).not.toContain('"name":""')
+  })
+
+  it("guarda education vacío si la lista llega vacía o se descarta toda", async () => {
+    const empty = loadWith(extracted(), roles, text, [])
+    const discarded = loadWith(extracted(), roles, text, [
+      educationItem("  ", "Instituto", 2019, 1, false),
+    ])
+
+    expect(await empty.loadCv(file, "clave")).toMatchObject({
+      ok: true,
+      profile: { education: [] },
+    })
+    expect(await discarded.loadCv(file, "clave")).toMatchObject({
+      ok: true,
+      profile: { education: [] },
+    })
+  })
+
+  it("si la educación falla o no es una lista, no escribe el perfil nuevo", async () => {
+    const first = loaderWithExperience(2, 3, text)
+    await first(file, "clave")
+    const previous = await readProfile()
+
+    const failed = loadWith(extracted(), roles, text, new Error("fallo de educación"))
+    const broken = await failed.loadCv(file, "clave")
+
+    expect(broken.ok).toBe(false)
+    expect(broken).not.toHaveProperty("profile")
+    expect(await readProfile()).toEqual(previous)
+
+    const notAList = loadWith(extracted(), roles, text, { name: "Ingeniero en Sistemas" })
+    const rejected = await notAList.loadCv(file, "clave")
+
+    expect(rejected).toEqual({ ok: false, message: UNUSABLE_PROFILE })
+    expect(await readProfile()).toEqual(previous)
+    expect(await readProfileStorage()).toMatchObject({
+      storeNames: ["profile"],
+      records: [previous],
+    })
   })
 })

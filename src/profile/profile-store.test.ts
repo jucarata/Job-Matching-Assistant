@@ -15,7 +15,7 @@ const currentProfile: Profile = {
   tech_skills: ["TypeScript"],
   soft_skills: ["Comunicación"],
   languages: [{ language: "Español", level: "nativo" }],
-  education: ["Ingeniería"],
+  education: [{ name: "Ingeniero en Sistemas", issuer: "Universidad ICESI", status: "FINALIZADO" }],
   roles: [{ role: "Full Stack", experience_time: 2, reliability: 0.95, evidence: "frase" }],
   flat_text: "perfil nuevo",
 }
@@ -53,6 +53,24 @@ describe("perfil ya guardado", () => {
     const stored = await readProfileStorage()
     expect(stored.storeNames).toEqual(["profile"])
     expect(stored.records).toEqual([legacyProfile])
+
+    await putRecord(currentProfile)
+
+    expect(await readProfile()).toEqual(currentProfile)
+  })
+
+  it("ignora education como lista de frases y devuelve la entrada nueva", async () => {
+    const phrases = {
+      ...currentProfile,
+      education: ["Ingeniería"],
+      flat_text: "perfil con frases",
+    }
+    await putRecord(phrases)
+
+    expect(await readProfile()).toBeNull()
+    const stored = await readProfileStorage()
+    expect(stored.storeNames).toEqual(["profile"])
+    expect(stored.records).toEqual([phrases])
 
     await putRecord(currentProfile)
 

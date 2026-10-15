@@ -1,5 +1,5 @@
 import { LoadStepError, PROFILE_SAVE_FAILED } from "@/profile/load-errors"
-import type { Profile, ProfileLanguage, ProfileRole } from "@/profile/types"
+import type { Profile, ProfileEducation, ProfileLanguage, ProfileRole } from "@/profile/types"
 
 export const PROFILE_DB_NAME = "johai"
 export const PROFILE_STORE_NAME = "profile"
@@ -40,7 +40,11 @@ function profileRecord(profile: Profile): Profile {
       reliability: item.reliability,
       evidence: item.evidence,
     })),
-    education: [...profile.education],
+    education: profile.education.map((item) => ({
+      name: item.name,
+      issuer: item.issuer,
+      status: item.status,
+    })),
     flat_text: profile.flat_text,
   }
 }
@@ -53,6 +57,16 @@ function isLanguage(value: unknown): value is ProfileLanguage {
   if (!value || typeof value !== "object") return false
   const item = value as ProfileLanguage
   return typeof item.language === "string" && typeof item.level === "string"
+}
+
+function isEducation(value: unknown): value is ProfileEducation {
+  if (!value || typeof value !== "object") return false
+  const item = value as ProfileEducation
+  return (
+    typeof item.name === "string" &&
+    typeof item.issuer === "string" &&
+    (item.status === null || item.status === "FINALIZADO" || item.status === "ACTUALMENTE")
+  )
 }
 
 function isRole(value: unknown): value is ProfileRole {
@@ -70,7 +84,8 @@ function asProfile(value: unknown): Profile | null {
   if (!value || typeof value !== "object") return null
   const record = value as Profile
   if (!isStringArray(record.tech_skills) || !isStringArray(record.soft_skills)) return null
-  if (!isStringArray(record.education) || typeof record.flat_text !== "string") return null
+  if (!Array.isArray(record.education) || !record.education.every(isEducation)) return null
+  if (typeof record.flat_text !== "string") return null
   if (!Array.isArray(record.roles) || !record.roles.every(isRole)) return null
   if (!Array.isArray(record.languages) || !record.languages.every(isLanguage)) return null
   return profileRecord(record)

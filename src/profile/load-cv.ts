@@ -1,3 +1,4 @@
+import { createEducationChain } from "@/ai/education-chain"
 import { MISSING_GEMINI_KEY } from "@/ai/gemini"
 import type { FieldChain } from "@/ai/load-chain"
 import { createLoadChain } from "@/ai/load-chain"
@@ -20,6 +21,8 @@ export function createCvLoader(
   createChain: (apiKey: string) => FieldChain = createLoadChain,
   extractText?: (file: File) => Promise<string>,
   createRoles: (apiKey: string) => FieldChain = createRoleChain,
+  createEducation: (apiKey: string) => FieldChain = createEducationChain,
+  now: () => Date = () => new Date(),
 ): CvLoader {
   return async (file, apiKey, onProgress) => {
     const key = apiKey.trim()
@@ -30,6 +33,8 @@ export function createCvLoader(
         apiKey: key,
         createChain,
         createRoleChain: createRoles,
+        createEducationChain: createEducation,
+        now,
         extractText,
         onProgress,
       })

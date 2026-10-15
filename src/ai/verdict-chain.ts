@@ -2,7 +2,7 @@ import { ChatPromptTemplate } from "@langchain/core/prompts"
 import { z } from "zod"
 import { isGridScore } from "@/ai/fit-threshold"
 import { createGeminiChat } from "@/ai/gemini"
-import type { Profile } from "@/profile/types"
+import type { Profile, ProfileEducation } from "@/profile/types"
 
 export const VERDICT_FAILED = "No se pudo revisar la vacante."
 
@@ -19,7 +19,7 @@ export type VerdictProfile = {
   soft_skills: string[]
   languages: { language: string; level: string }[]
   roles: { role: string; experience_time: number | null }[]
-  education: string[]
+  education: ProfileEducation[]
   flat_text: string
 }
 
@@ -36,6 +36,10 @@ const verdictPrompt = ChatPromptTemplate.fromMessages([
       "Do not round score.",
       "A match must be visible in the profile fields or in flat_text.",
       "If the fields and flat_text disagree, flat_text wins.",
+      "To decide if a degree or certificate is already obtained or still in progress, status wins over flat_text.",
+      "FINALIZADO means it was already obtained.",
+      "ACTUALMENTE means it is still in progress.",
+      "A null status does not assert either.",
       "Words in the message that are not the vacancy are notes from the user and are not job requirements.",
       "Do not give advice.",
     ].join(" "),
@@ -49,7 +53,7 @@ export function profileForVerdict(profile: Profile): VerdictProfile {
     soft_skills: [...profile.soft_skills],
     languages: profile.languages.map(({ language, level }) => ({ language, level })),
     roles: profile.roles.map(({ role, experience_time }) => ({ role, experience_time })),
-    education: [...profile.education],
+    education: profile.education.map(({ name, issuer, status }) => ({ name, issuer, status })),
     flat_text: profile.flat_text,
   }
 }

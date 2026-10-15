@@ -10,12 +10,20 @@ export type ProfileRole = {
   evidence: string
 }
 
+export type EducationStatus = "FINALIZADO" | "ACTUALMENTE"
+
+export type ProfileEducation = {
+  name: string
+  issuer: string
+  status: EducationStatus | null
+}
+
 export type Profile = {
   tech_skills: string[]
   soft_skills: string[]
   languages: ProfileLanguage[]
   roles: ProfileRole[]
-  education: string[]
+  education: ProfileEducation[]
   flat_text: string
 }
 

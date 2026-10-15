@@ -589,6 +589,11 @@ function ProfileStatus({ profile }: { profile: Profile }) {
   const languages = profile.languages
     .map((item) => `${item.language} (${item.level})`)
     .join(", ")
+  const education = profile.education
+    .map((item) =>
+      [item.name, item.issuer, item.status].filter((part): part is string => Boolean(part)).join(", "),
+    )
+    .join(", ")
 
   return (
     <div aria-label="Estado del perfil" role="region" className="pr-3">
@@ -618,12 +623,7 @@ function ProfileStatus({ profile }: { profile: Profile }) {
             item.experience_time === null ? [] : [`${item.role}: ${item.experience_time} años`],
           )}
         />
-        <ProfileField
-          icon={GraduationCap}
-          tone="coral"
-          label="Educación"
-          value={profile.education.join(", ")}
-        />
+        <ProfileField icon={GraduationCap} tone="coral" label="Educación" value={education} />
       </dl>
     </div>
   )

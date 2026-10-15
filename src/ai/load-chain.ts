@@ -14,7 +14,6 @@ export const extractedFieldsSchema = z.object({
       level: z.enum(LANGUAGE_LEVELS),
     }),
   ),
-  education: z.array(z.string()),
 })
 
 export type ExtractedFields = z.infer<typeof extractedFieldsSchema>
@@ -24,9 +23,9 @@ const loadPrompt = ChatPromptTemplate.fromMessages([
     "system",
     [
       "Extrae del CV únicamente lo que el texto sostiene.",
-      "Devuelve tech_skills, soft_skills, languages y education.",
+      "Devuelve tech_skills, soft_skills y languages.",
       "En languages, cada idioma humano lleva level: básico, intermedio, avanzado o nativo.",
-      "No inventes habilidades, idiomas ni títulos.",
+      "No inventes habilidades ni idiomas.",
     ].join(" "),
   ],
   ["human", "{text}"],
