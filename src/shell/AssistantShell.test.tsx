@@ -708,7 +708,7 @@ describe("chat de una vacante", () => {
     const dialog = await screen.findByRole("dialog", { name: "Ajustes" })
     const conversation = screen.getByRole("region", { name: "Conversación", hidden: true })
     expect(conversation.contains(dialog)).toBe(false)
-    const control = within(dialog).getByLabelText("Postular desde")
+    const control = within(dialog).getByLabelText("Puntaje de postulación mínimo")
     expect(control).toHaveValue("7")
     expect(within(dialog).queryByLabelText("Clave de Gemini")).not.toBeInTheDocument()
 

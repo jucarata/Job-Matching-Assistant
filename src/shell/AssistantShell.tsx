@@ -192,26 +192,12 @@ export function AssistantShell({
             <span className="grid size-11 place-items-center rounded-2xl bg-[var(--teal)] text-white shadow-[0_10px_24px_-12px_var(--teal)]">
               <Sparkles aria-hidden="true" className="size-5" />
             </span>
-            <div>
-              <h1 className="text-lg font-semibold tracking-tight">Asistente</h1>
-              <p className="texto-meta">Perfil, conversación y ajustes</p>
-            </div>
+            <h1 className="text-lg font-semibold tracking-tight">Asistente</h1>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <StatusPill active={!hasProfile} tone="coral">
-              CV
-            </StatusPill>
-            <StatusPill active={hasProfile} tone="violeta">
-              Perfil
-            </StatusPill>
-            <StatusPill active={hasProfile && !loading} tone="cielo">
-              Conversación
-            </StatusPill>
-            <Button variant="ghost" onClick={() => setSettingsOpen(true)}>
-              <Settings aria-hidden="true" className="size-4" />
-              Ajustes
-            </Button>
-          </div>
+          <Button variant="ghost" onClick={() => setSettingsOpen(true)}>
+            <Settings aria-hidden="true" className="size-4" />
+            Ajustes
+          </Button>
         </div>
         <div
           aria-hidden="true"
@@ -449,12 +435,12 @@ export function AssistantShell({
           <div className="p-6">
             <DialogTitle>Ajustes</DialogTitle>
             <p className="texto-meta mt-2">
-              Esta ventana queda fuera de la conversación.
+              El asistente recomienda postular cuando el puntaje de la vacante llega a este mínimo.
             </p>
             <div className="mt-4 flex flex-col gap-2">
-              <Label htmlFor="postular-desde">Postular desde</Label>
+              <Label htmlFor="puntaje-minimo">Puntaje de postulación mínimo</Label>
               <select
-                id="postular-desde"
+                id="puntaje-minimo"
                 className="flex h-11 w-full rounded-[var(--radio-control)] border border-[var(--linea)] bg-white px-3 text-base text-[var(--tinta)]"
                 value={String(threshold)}
                 onChange={(event) => {
@@ -470,6 +456,9 @@ export function AssistantShell({
                   </option>
                 ))}
               </select>
+              <p className="texto-meta">
+                La escala va de 0 a 10, de medio en medio. Un puntaje igual o mayor se etiqueta Postular; uno menor, No postular.
+              </p>
             </div>
             <DialogClose>Cerrar</DialogClose>
           </div>
@@ -585,39 +574,6 @@ function LoadStepList({ progress, compact }: { progress: LoadProgress; compact: 
         })}
       </ol>
     </div>
-  )
-}
-
-const pillTones = {
-  coral: {
-    on: "bg-[var(--coral)] text-white",
-    off: "bg-[var(--coral-suave)] text-[var(--coral)]",
-  },
-  violeta: {
-    on: "bg-[var(--violeta)] text-white",
-    off: "bg-[var(--violeta-suave)] text-[var(--violeta)]",
-  },
-  cielo: {
-    on: "bg-[var(--cielo)] text-white",
-    off: "bg-[var(--cielo-suave)] text-[var(--cielo)]",
-  },
-} as const
-
-function StatusPill({
-  active,
-  tone,
-  children,
-}: {
-  active: boolean
-  tone: keyof typeof pillTones
-  children: string
-}) {
-  return (
-    <span
-      className={`rounded-full px-3 py-1 text-sm font-medium ${active ? pillTones[tone].on : pillTones[tone].off}`}
-    >
-      {children}
-    </span>
   )
 }
 
