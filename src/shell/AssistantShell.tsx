@@ -20,6 +20,7 @@ import { Dialog, DialogClose, DialogContent, DialogTitle } from "@/components/ui
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { MISSING_GEMINI_KEY, readGeminiApiKey, writeGeminiApiKey } from "@/ai/gemini"
 import { defaultLoadCv } from "@/profile/load-cv"
 import type { CvLoader, Profile } from "@/profile/types"
 
@@ -33,6 +34,7 @@ type AssistantShellProps = {
 
 export function AssistantShell({ loadCv = defaultLoadCv }: AssistantShellProps) {
   const [profile, setProfile] = useState<Profile | null>(null)
+  const [apiKey, setApiKey] = useState(readGeminiApiKey)
   const [draft, setDraft] = useState("")
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -61,13 +63,20 @@ export function AssistantShell({ loadCv = defaultLoadCv }: AssistantShellProps) 
     if (!file || loadingRef.current) return
 
     const beside: ErrorBeside = profile ? "reemplazar" : "cargar"
+    const key = apiKey.trim()
+    if (!key) {
+      setError(MISSING_GEMINI_KEY)
+      setErrorBeside(beside)
+      return
+    }
+
     loadingRef.current = true
     setLoading(true)
     setError(null)
     setErrorBeside(null)
 
     try {
-      const result = await loadCv(file)
+      const result = await loadCv(file, key)
       if (!mountedRef.current) return
       if (result.ok) {
         setProfile(result.profile)
@@ -214,27 +223,43 @@ export function AssistantShell({ loadCv = defaultLoadCv }: AssistantShellProps) 
 
         <section aria-label="Perfil" className="flex min-w-0 flex-1 flex-col p-4 md:min-h-0">
           <div className="mb-4 flex shrink-0 flex-col gap-2">
-            {hasProfile ? (
-              <Button
-                variant="secondary"
-                className="w-full"
-                disabled={loading}
-                onClick={openFilePicker}
-              >
-                <Upload aria-hidden="true" className="size-4" />
-                Reemplazar CV
-              </Button>
-            ) : (
-              <Button
-                variant="primary"
-                className="w-full"
-                disabled={loading}
-                onClick={openFilePicker}
-              >
-                <Upload aria-hidden="true" className="size-4" />
-                Cargar CV
-              </Button>
-            )}
+            <div className="flex items-end gap-2">
+              <div className="flex min-w-0 flex-1 flex-col gap-2">
+                <Label htmlFor="clave-gemini">Clave de Gemini</Label>
+                <Input
+                  id="clave-gemini"
+                  type="password"
+                  autoComplete="off"
+                  value={apiKey}
+                  onChange={(event) => {
+                    const value = event.target.value
+                    setApiKey(value)
+                    writeGeminiApiKey(value)
+                  }}
+                />
+              </div>
+              {hasProfile ? (
+                <Button
+                  variant="secondary"
+                  className="shrink-0"
+                  disabled={loading}
+                  onClick={openFilePicker}
+                >
+                  <Upload aria-hidden="true" className="size-4" />
+                  Reemplazar CV
+                </Button>
+              ) : (
+                <Button
+                  variant="primary"
+                  className="shrink-0"
+                  disabled={loading}
+                  onClick={openFilePicker}
+                >
+                  <Upload aria-hidden="true" className="size-4" />
+                  Cargar CV
+                </Button>
+              )}
+            </div>
             {error && (errorBeside === "cargar" || errorBeside === "reemplazar") ? (
               <Alert>
                 <AlertDescription>{error}</AlertDescription>

@@ -15,4 +15,4 @@ export type LoadResult =
   | { ok: true; profile: Profile }
   | { ok: false; message: string }
 
-export type CvLoader = (file: File) => Promise<LoadResult>
+export type CvLoader = (file: File, apiKey: string) => Promise<LoadResult>

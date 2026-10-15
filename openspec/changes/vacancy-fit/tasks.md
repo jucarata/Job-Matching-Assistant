@@ -14,12 +14,12 @@
 
 ## 3. Clave y veredicto
 
-- [ ] 3.1 Guardar la clave en `localStorage` bajo `geminiApiKey`, rellenarla al abrir la página y no pedir project id. Sin clave, la carga no llama al modelo. Verificar con pruebas: clave releída, carga sin clave que no guarda `profile`, y ausencia de project id en el módulo.
+- [x] 3.1 Guardar la clave en `localStorage` bajo `geminiApiKey`, rellenarla al abrir la página y no pedir project id. Sin clave, la carga no llama al modelo. Verificar con pruebas: clave releída, carga sin clave que no guarda `profile`, y ausencia de project id en el módulo.
 - [ ] 3.2 Implementar la cadena de veredicto con system prompt y salida `matches`, `weaknesses`, `score` (entero 0–100) y `apply_recommendation` (booleano). Enviar solo los campos estructurados y el texto de la vacante. Verificar con un cliente falso: la llamada no incluye `flat_text` ni el mensaje anterior, un segundo envío no recibe el veredicto previo, y un resultado incompleto o un `score` fuera de rango no se acepta.
 
 ## 4. Pantalla
 
-- [ ] 4.1 Poner el campo «Clave de Gemini» (`type="password"`) en la fila de «Cargar CV» y de «Reemplazar CV», sin `data-primary` y fuera de los ajustes. Verificar en `src/shell/AssistantShell.test.tsx`: sin perfil la única acción primaria sigue siendo «Cargar CV», con perfil el campo sigue visible, y el diálogo de ajustes no contiene el campo.
+- [x] 4.1 Poner el campo «Clave de Gemini» (`type="password"`) en la fila de «Cargar CV» y de «Reemplazar CV», sin `data-primary` y fuera de los ajustes. Verificar en `src/shell/AssistantShell.test.tsx`: sin perfil la única acción primaria sigue siendo «Cargar CV», con perfil el campo sigue visible, y el diálogo de ajustes no contiene el campo.
 - [ ] 4.2 Al terminar bien la llamada, vaciar el compositor y mostrar «Coincidencias», «Debilidades», «Puntaje» y «Postular» o «No postular». Si falta la clave, falta el texto o la llamada falla, conservar el borrador, no mostrar veredicto y poner el error junto a «Enviar». Un reemplazo de CV que termina bien borra el veredicto; uno que falla lo conserva. Verificar esos casos en las pruebas del shell con un cliente de veredicto falso.
 - [ ] 4.3 Actualizar `README.md` con la fila de la clave, el `profile` (incluido `flat_text`), el modelo `gemini-3.5-flash` y las cuatro piezas del veredicto. Verificar que el README no pide project id ni describe embeddings, y que `npm run build` no contiene una API key de ejemplo.
 

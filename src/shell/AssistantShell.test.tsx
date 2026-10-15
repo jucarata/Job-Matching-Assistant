@@ -1,4 +1,4 @@
-import { act, render, screen } from "@testing-library/react"
+import { act, render, screen, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import css from "../index.css?raw"
@@ -31,6 +31,7 @@ function deferred<T>() {
 }
 
 function renderShell() {
+  localStorage.removeItem("geminiApiKey")
   const calls: Array<ReturnType<typeof deferred<LoadResult>>> = []
   const loadCv: CvLoader = () => {
     const pending = deferred<LoadResult>()
@@ -38,8 +39,8 @@ function renderShell() {
     return pending.promise
   }
   const user = userEvent.setup()
-  render(<AssistantShell loadCv={loadCv} />)
-  return { calls, user }
+  const view = render(<AssistantShell loadCv={loadCv} />)
+  return { calls, user, unmount: view.unmount }
 }
 
 function fileInput() {
@@ -48,7 +49,16 @@ function fileInput() {
   return input
 }
 
-async function chooseFile(user: ReturnType<typeof userEvent.setup>) {
+async function chooseFile(
+  user: ReturnType<typeof userEvent.setup>,
+  options?: { key?: boolean },
+) {
+  if (options?.key !== false) {
+    const field = screen.getByLabelText("Clave de Gemini")
+    if (field instanceof HTMLInputElement && field.value === "") {
+      await user.type(field, "clave-de-prueba")
+    }
+  }
   const file = new File(["cv"], "cv.pdf", { type: "application/pdf" })
   await act(async () => {
     await user.upload(fileInput(), file)
@@ -65,6 +75,7 @@ async function finishLoad(
 }
 
 afterEach(() => {
+  localStorage.removeItem("geminiApiKey")
   toast.dismiss()
   vi.restoreAllMocks()
 })
@@ -108,14 +119,43 @@ describe("pantalla sin perfil", () => {
 
   it("Sin perfil: la única acción primaria es Cargar CV y abre el archivo", async () => {
     const { user } = renderShell()
+    const key = screen.getByLabelText("Clave de Gemini")
+    const load = screen.getByRole("button", { name: "Cargar CV" })
+    expect(key).toHaveAttribute("type", "password")
+    expect(key).not.toHaveAttribute("data-primary")
+    expect(key.parentElement?.parentElement).toContainElement(load)
+
     const primary = document.querySelectorAll("[data-primary='true']")
     expect(primary).toHaveLength(1)
     expect(primary[0]).toHaveAccessibleName("Cargar CV")
 
     const input = fileInput()
     const click = vi.spyOn(input, "click")
-    await user.click(screen.getByRole("button", { name: "Cargar CV" }))
+    await user.click(load)
     expect(click).toHaveBeenCalled()
+  })
+
+  it("Sin clave: no carga el perfil y el error queda junto a Cargar CV", async () => {
+    const { calls, user } = renderShell()
+    await chooseFile(user, { key: false })
+
+    expect(calls).toHaveLength(0)
+    const alert = await screen.findByRole("alert")
+    expect(alert).toHaveTextContent("Falta la clave de Gemini.")
+    const profile = screen.getByRole("region", { name: "Perfil" })
+    expect(profile.contains(alert)).toBe(true)
+    expect(profile.contains(screen.getByRole("button", { name: "Cargar CV" }))).toBe(true)
+    expect(screen.queryByRole("region", { name: "Estado del perfil" })).not.toBeInTheDocument()
+  })
+
+  it("guarda la clave y la rellena al abrir la página", async () => {
+    const { user, unmount } = renderShell()
+    await user.type(screen.getByLabelText("Clave de Gemini"), "clave-guardada")
+    expect(localStorage.getItem("geminiApiKey")).toBe("clave-guardada")
+
+    unmount()
+    render(<AssistantShell />)
+    expect(screen.getByLabelText("Clave de Gemini")).toHaveValue("clave-guardada")
   })
 
   it("Zona vacía: el perfil no muestra un estado", () => {
@@ -140,6 +180,8 @@ describe("pantalla sin perfil", () => {
     const conversation = screen.getByRole("region", { name: "Conversación", hidden: true })
     expect(conversation.contains(dialog)).toBe(false)
     expect(screen.getByRole("button", { name: "Cerrar" })).toBeVisible()
+    expect(within(dialog).queryByLabelText("Clave de Gemini")).not.toBeInTheDocument()
+    expect(dialog.textContent?.toLowerCase()).not.toContain("project")
   })
 })
 
@@ -157,7 +199,11 @@ describe("pantalla con perfil", () => {
     expect(primary).toHaveLength(1)
     expect(primary[0]).toHaveAccessibleName("Enviar")
 
+    const key = screen.getByLabelText("Clave de Gemini")
     const replace = screen.getByRole("button", { name: "Reemplazar CV" })
+    expect(key).toBeVisible()
+    expect(key).not.toHaveAttribute("data-primary")
+    expect(key.parentElement?.parentElement).toContainElement(replace)
     expect(replace).not.toHaveAttribute("data-primary", "true")
     const click = vi.spyOn(fileInput(), "click")
     await user.click(replace)
