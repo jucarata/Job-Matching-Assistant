@@ -2,41 +2,44 @@
 
 ## Why
 
-El perfil ya no se recupera por embeddings, y el veredicto de una vacante sigue sin estar definido. Hay que fijarlo ahora, con el estado estructurado y el texto de la vacante, y guardar además el texto plano del CV para validaciones posteriores.
+El veredicto de una vacante sigue sin estar implementado, y el contrato escrito le pide al modelo un sí o un no. El puntaje tiene que medir solo cuánto cubre el perfil, para que la decisión de postular sea un corte que el usuario pueda mover sin otra llamada.
 
 ## What Changes
 
-- Comparar, en un solo envío, el estado estructurado del CV con el texto de la vacante. Un system prompt pide la decisión. La respuesta tiene cuatro campos en inglés: `matches`, `weaknesses`, `score` y `apply_recommendation`.
-- El estado guardado se llama `profile`. Todos sus campos van en inglés: `tech_skills`, `soft_skills`, `languages`, `experience_time`, `education` y `flat_text`.
-- `flat_text` es el texto tal cual extraído del PDF, sin modelo. Se guarda con el perfil y no entra en la llamada del veredicto. El archivo PDF sigue sin guardarse.
-- La clave de Gemini se escribe en la misma fila que «Cargar CV» (y que «Reemplazar CV» cuando ya hay perfil). Sirve para extraer el estado y para el veredicto. Persiste en el navegador.
-- «Enviar» llama a Gemini y muestra esas cuatro piezas. Sin perfil, sin clave o sin texto de vacante, no hay llamada.
-- La carga del CV y el veredicto usan una cadena de LangChain, no un grafo de LangGraph. Sigue sin chunks, sin embeddings y sin memoria de mensajes.
-- **BREAKING** respecto del contrato abierto de `cv-profile`: el perfil deja de ser solo los cinco campos estructurados y pasa a incluir `flat_text`. Los nombres de campo del estado quedan fijados en inglés bajo `profile`.
+- Una cadena de LangChain compara el `profile` completo con el mensaje. El system prompt está en inglés. La salida del modelo tiene tres campos en inglés: `matches`, `mismatches` y `score`.
+- La llamada envía `tech_skills`, `soft_skills`, `languages`, `experience_time`, `education`, `flat_text` y el texto del mensaje. El mensaje trae la vacante y puede traer notas del usuario. Esas notas no son requisitos del puesto.
+- `score` es cobertura, de 0 a 10, en pasos de 0.5. 0 es que nada de la experiencia coincide. 10 es que la experiencia cubre todos los requisitos. Un valor fuera de esa grilla no se acepta ni se redondea.
+- El modelo no devuelve recomendación de postular, ni consejos, ni conoce el corte. `matches` y `mismatches` se piden en el idioma del `profile`.
+- La aplicación etiqueta el puntaje: `score` mayor o igual al corte es «Postular»; por debajo es «No postular». El corte inicial es 7, usa la misma grilla de 0.5 y se guarda en el navegador. Cambiarlo vuelve a etiquetar el puntaje visible sin llamar al modelo. El control está en Ajustes.
+- «Enviar» muestra un solo intercambio en la zona que hoy dice «La conversación está abierta»: el texto enviado y, en la respuesta, el puntaje, la etiqueta y las dos listas. Un envío nuevo limpia el anterior y no se persiste. Sin perfil, sin clave o sin texto, no hay llamada.
+- **BREAKING** respecto del contrato anterior de esta change: el veredicto deja de ser `matches`, `weaknesses`, `score` de 0 a 100 y `apply_recommendation`. `flat_text` entra en la llamada.
 
 Supuestos de este cambio, corregibles antes de implementar:
 
-- `score` es un entero de 0 a 100. `apply_recommendation` es booleano. `matches` y `weaknesses` son listas de textos.
-- Las etiquetas de la interfaz siguen en español. Los valores de nivel de idioma siguen siendo `básico`, `intermedio`, `avanzado` y `nativo`.
-- `flat_text` no se envía al modelo del veredicto. Queda reservado para validaciones que esta change no define.
-- `cv-profile` y `assistant-shell` todavía no están en `openspec/specs/`. Sus requisitos viven en las changes abiertas `job-fit-assistant`, `remove-rag` y `assistant-ui`.
-- Ningún navegador tiene un perfil guardado de este proyecto. No hay datos que migrar.
+- «La conversación está abierta» se ve solo cuando no hay intercambio.
+- Un envío que llama al modelo limpia el intercambio anterior, muestra el texto enviado y vacía el compositor. Si la llamada termina bien, aparece la respuesta. Si falla, el texto vuelve al compositor, no queda intercambio y el error queda junto a «Enviar».
+- Un envío que no llama al modelo conserva el intercambio y el borrador.
+- El corte se elige solo entre los valores de la grilla. Si no hay uno guardado, es 7.
+- Las etiquetas de la interfaz siguen en español. Los niveles de idioma siguen siendo `básico`, `intermedio`, `avanzado` y `nativo`.
+- `cv-profile` y `assistant-shell` todavía no están en `openspec/specs/`. Sus requisitos viven en las changes abiertas.
 
 ## Capabilities
 
 ### New Capabilities
 
-- `vacancy-fit`: decidir el ajuste entre el `profile` estructurado y el texto de una vacante, y devolver `matches`, `weaknesses`, `score` y `apply_recommendation`.
+- `vacancy-fit`: comparar el `profile` completo con el mensaje de una vacante y devolver `matches`, `mismatches` y `score`.
 
 ### Modified Capabilities
 
-- `cv-profile`: el estado se llama `profile`, sus campos están en inglés y incluye `flat_text`. Sigue sin guardar el PDF, chunks ni embeddings.
-- `assistant-shell`: la clave de Gemini está en la fila de carga del CV, y «Enviar» muestra el veredicto de cuatro piezas.
+- `cv-profile`: el estado se llama `profile`, sus campos están en inglés e incluye `flat_text`. Sigue sin guardar el PDF, chunks ni embeddings.
+- `assistant-shell`: «Enviar» muestra un chat de un solo intercambio, la etiqueta de postular sale del corte, y ese corte se edita en Ajustes.
 
 ## Impact
 
-- Hay que reescribir el delta `openspec/changes/remove-rag/specs/cv-profile/spec.md`: hoy dice que una carga válida conserva solo el estado estructurado y que el veredicto pierde el texto literal del CV. `flat_text` conserva ese texto, sin volver a introducir chunks ni embeddings.
-- `job-fit-assistant` todavía describe LangGraph, chunks y los campos sin `flat_text`. `remove-rag` ya iba a aplanar esa change; esta añade el nombre `profile`, `flat_text` y la cadena de LangChain.
+- Hay que reescribir el delta `openspec/changes/remove-rag/specs/cv-profile/spec.md`: hoy una carga válida conserva solo el estado estructurado. `flat_text` conserva el texto literal, y la llamada del veredicto lo envía junto con el resto del `profile`.
+- `remove-rag` dice que el veredicto pierde el texto literal del CV. Ese texto se guarda y el veredicto lo usa.
+- `job-fit-assistant` todavía describe LangGraph, chunks y los campos sin `flat_text`. `remove-rag` ya iba a aplanar esa change; esta mantiene el nombre `profile`, `flat_text` y la cadena de LangChain.
 - `assistant-shell` dice que «Enviar» no llama a un modelo y que conserva el borrador. Ese requisito cambia.
-- Código afectado cuando se implemente: `src/shell/AssistantShell.tsx`, `src/profile/types.ts` y `src/profile/load-cv.ts`. Hoy la carga rechaza el archivo y el diálogo de ajustes no pide la clave.
-- Dependencia nueva para la cadena: LangChain con el cliente de Gemini en el navegador. No hay backend ni project id. La clave no entra en el build.
+- Código ya en el repo: la carga, el `profile` y la clave en la fila del CV. `src/shell/AssistantShell.tsx` todavía no llama al modelo en «Enviar». El diálogo de Ajustes no tiene el corte. No hay `README.md`.
+- La cadena de veredicto usa el mismo cliente y el mismo `GEMINI_MODEL` que la carga. Hoy ese id es `gemini-3.8-flash`.
+- Sigue sin backend, sin project id, sin chunks, sin embeddings y sin memoria de mensajes.
