@@ -390,7 +390,9 @@ export function AssistantShell({
             </CardHeader>
             <CardContent className="flex min-h-0 flex-1 flex-col gap-4">
               {progress && progress.status !== "done" ? (
-                <LoadStepList progress={progress} compact={profile !== null} />
+                <ScrollArea className="min-h-0 flex-1">
+                  <LoadStepList progress={progress} />
+                </ScrollArea>
               ) : null}
               {profile ? (
                 <ScrollArea className="min-h-0 flex-1">
@@ -539,13 +541,13 @@ function LoadProgressBar({ progress }: { progress: LoadProgress }) {
   )
 }
 
-function LoadStepList({ progress, compact }: { progress: LoadProgress; compact: boolean }) {
+function LoadStepList({ progress }: { progress: LoadProgress }) {
   const stopped = progress.status === "error"
   return (
     <div
-      className={`flex flex-col justify-center rounded-[var(--radio-tarjeta)] border px-6 py-6 ${
-        compact ? "" : "min-h-64 flex-1"
-      } ${stopped ? "border-[var(--error)]/30 bg-[var(--error-suave)]" : "border-[var(--teal)]/25 bg-[var(--teal-suave)]"}`}
+      className={`flex min-h-full flex-col rounded-[var(--radio-tarjeta)] border px-6 py-6 ${
+        stopped ? "border-[var(--error)]/30 bg-[var(--error-suave)]" : "border-[var(--teal)]/25 bg-[var(--teal-suave)]"
+      }`}
     >
       <p className={`font-semibold ${stopped ? "text-[var(--error)]" : "text-[var(--teal)]"}`}>
         {stopped ? "La carga se detuvo" : "Cargando el CV"}

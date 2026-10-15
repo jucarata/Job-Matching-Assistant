@@ -168,7 +168,10 @@ describe("pantalla sin perfil", () => {
     expect(bar).toHaveAttribute("aria-valuemax", "9")
     expect(bar).toHaveAttribute("aria-valuenow", "0")
     expect(bar).toHaveAttribute("aria-valuetext", "Validar el PDF")
-    expect(screen.getByRole("list", { name: "Pasos de la carga" })).toBeInTheDocument()
+    const steps = screen.getByRole("list", { name: "Pasos de la carga" })
+    const stepsScroll = steps.closest(".overflow-hidden")
+    expect(stepsScroll?.className).toContain("min-h-0")
+    expect(stepsScroll?.className).toContain("flex-1")
     expect(screen.getByText("Cargando el CV")).toBeInTheDocument()
 
     await finishLoad(calls[0], { ok: false, message: "El PDF no tiene texto." })

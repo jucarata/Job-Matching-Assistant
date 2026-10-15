@@ -1,6 +1,6 @@
-# JOHAI
+# Asistente de búsqueda de trabajo
 
-Asistente para comparar un CV con una vacante.
+Compara un CV con una vacante.
 
 ## Clave de Gemini
 
