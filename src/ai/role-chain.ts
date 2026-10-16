@@ -1,6 +1,6 @@
 import { ChatPromptTemplate } from "@langchain/core/prompts"
 import { z } from "zod"
-import { createGeminiChat } from "@/ai/gemini"
+import { structuredGemini } from "@/ai/gemini"
 
 export const proposedRoleSchema = z
   .object({
@@ -39,6 +39,6 @@ const rolePrompt = ChatPromptTemplate.fromMessages([
 ])
 
 export function createRoleChain(apiKey: string) {
-  const model = createGeminiChat(apiKey).withStructuredOutput(proposedRolesSchema)
+  const model = structuredGemini(apiKey, proposedRolesSchema)
   return rolePrompt.pipe(model)
 }

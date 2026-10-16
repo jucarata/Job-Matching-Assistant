@@ -1,6 +1,6 @@
 import { ChatPromptTemplate } from "@langchain/core/prompts"
 import { z } from "zod"
-import { createGeminiChat } from "@/ai/gemini"
+import { structuredGemini } from "@/ai/gemini"
 
 export const extractedEducationSchema = z.object({
   name: z.string(),
@@ -34,6 +34,6 @@ const educationPrompt = ChatPromptTemplate.fromMessages([
 ])
 
 export function createEducationChain(apiKey: string) {
-  const model = createGeminiChat(apiKey).withStructuredOutput(extractedEducationListSchema)
+  const model = structuredGemini(apiKey, extractedEducationListSchema)
   return educationPrompt.pipe(model)
 }

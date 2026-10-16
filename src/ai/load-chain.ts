@@ -1,6 +1,6 @@
 import { ChatPromptTemplate } from "@langchain/core/prompts"
 import { z } from "zod"
-import { createGeminiChat } from "@/ai/gemini"
+import { structuredGemini } from "@/ai/gemini"
 import { LoadStepError, UNUSABLE_PROFILE } from "@/profile/load-errors"
 
 export const LANGUAGE_LEVELS = ["básico", "intermedio", "avanzado", "nativo"] as const
@@ -36,7 +36,7 @@ export type FieldChain = {
 }
 
 export function createLoadChain(apiKey: string) {
-  const model = createGeminiChat(apiKey).withStructuredOutput(extractedFieldsSchema)
+  const model = structuredGemini(apiKey, extractedFieldsSchema)
   return loadPrompt.pipe(model)
 }
 

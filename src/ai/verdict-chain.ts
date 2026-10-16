@@ -1,7 +1,7 @@
 import { ChatPromptTemplate } from "@langchain/core/prompts"
 import { z } from "zod"
 import { isGridScore } from "@/ai/fit-threshold"
-import { createGeminiChat } from "@/ai/gemini"
+import { structuredGemini } from "@/ai/gemini"
 import type { Profile, ProfileEducation } from "@/profile/types"
 
 export const VERDICT_FAILED = "No se pudo revisar la vacante."
@@ -59,7 +59,7 @@ export function profileForVerdict(profile: Profile): VerdictProfile {
 }
 
 export function createVerdictChain(apiKey: string) {
-  const model = createGeminiChat(apiKey).withStructuredOutput(verdictSchema)
+  const model = structuredGemini(apiKey, verdictSchema)
   return verdictPrompt.pipe(model)
 }
 

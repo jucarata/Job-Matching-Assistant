@@ -13,4 +13,4 @@ export const LOAD_STEP_LABELS = [
 export const LOAD_READY_LABEL = "CV listo"
 
 export const PDF_STEP_TIMEOUT_MS = 30_000
-export const MODEL_STEP_TIMEOUT_MS = 90_000
+export const MODEL_STEP_TIMEOUT_MS = 300_000

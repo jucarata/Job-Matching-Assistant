@@ -1,4 +1,6 @@
 import { ChatGoogleGenerativeAI } from "@langchain/google-genai"
+import type { z } from "zod"
+import { toGeminiResponseSchema } from "@/ai/gemini-schema"
 
 export const GEMINI_API_KEY_STORAGE = "geminiApiKey"
 export const GEMINI_MODEL = "gemini-3.8-flash"
@@ -28,4 +30,8 @@ export function createGeminiChat(apiKey: string) {
     apiKey: key,
     maxRetries: 0,
   })
+}
+
+export function structuredGemini(apiKey: string, schema: z.ZodType) {
+  return createGeminiChat(apiKey).withStructuredOutput(toGeminiResponseSchema(schema))
 }
